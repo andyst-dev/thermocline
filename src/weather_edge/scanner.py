@@ -16,6 +16,12 @@ class ScanSkip(Exception):
     pass
 
 
+def _cap_model_prob(prob: float) -> float:
+    # Until sigma is empirically calibrated, avoid fake certainties that make
+    # dust-priced contracts look like infinite money.
+    return max(0.05, min(0.95, prob))
+
+
 def _enrich_with_clob(settings: Settings, market: WeatherMarket, buckets: list[BucketProbability]) -> None:
     token_ids = market.raw.get("clobTokenIds") or []
     if isinstance(token_ids, str):
@@ -94,7 +100,7 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
     buckets: list[BucketProbability] = []
     for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
         lower, upper = parse_bucket(label)
-        model_prob = bucket_probability(lower, upper, forecast_max_c, sigma_c)
+        model_prob = _cap_model_prob(bucket_probability(lower, upper, forecast_max_c, sigma_c))
         edge = model_prob - market_prob
         ev = (model_prob * 1.0) - market_prob
         buckets.append(
@@ -175,7 +181,7 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
         if observed_value is not None:
             forecast_value_c = observed_value
             sigma_c = 0.3
-    bucket_prob = bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c)
+    bucket_prob = _cap_model_prob(bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c))
 
     buckets: list[BucketProbability] = []
     for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
@@ -238,7 +244,7 @@ def _scan_global_temperature_market(settings: Settings, market: WeatherMarket) -
         raise ScanSkip("question pattern unsupported")
     year, month, lower, upper = parsed
     baseline = global_temp_baseline(month)
-    bracket_prob = bucket_probability(lower, upper, baseline.mean_c, baseline.sigma_c)
+    bracket_prob = _cap_model_prob(bucket_probability(lower, upper, baseline.mean_c, baseline.sigma_c))
 
     buckets: list[BucketProbability] = []
     for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
