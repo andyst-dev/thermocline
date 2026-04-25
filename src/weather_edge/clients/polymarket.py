@@ -97,6 +97,15 @@ def _fetch_gamma_page(settings: Settings, offset: int) -> list[dict[str, Any]]:
     return payload if isinstance(payload, list) else []
 
 
+def fetch_market_by_id(settings: Settings, market_id: str) -> WeatherMarket | None:
+    if settings.use_fixtures:
+        return None
+    payload = get_json(f"{settings.polymarket_gamma_url}/markets/{market_id}", timeout=30)
+    if not isinstance(payload, dict):
+        return None
+    return _normalize_market(payload)
+
+
 def fetch_weather_markets(settings: Settings) -> list[WeatherMarket]:
     if settings.use_fixtures:
         return sample_weather_markets()

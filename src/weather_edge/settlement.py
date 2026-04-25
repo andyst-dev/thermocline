@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .clients.aviationweather import observed_extreme_c
-from .parsing import parse_temperature_contract
+from .clients.weathercom import official_extreme_c
+from .parsing import TemperatureContract, parse_temperature_contract
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,8 @@ class SettlementResult:
     outcome_price: float | None
     observed_value_c: float | None
     notes: str
+    authority: str = "none"
+    observation_count: int = 0
 
 
 def _icao_from_candidate(candidate: dict[str, Any]) -> str | None:
@@ -22,6 +25,22 @@ def _icao_from_candidate(candidate: dict[str, Any]) -> str | None:
     if isinstance(loc, str) and re.fullmatch(r"[A-Z]{4}", loc):
         return loc
     return None
+
+
+def _evaluate_contract(contract: TemperatureContract, observed: float, day_complete: bool) -> tuple[bool, bool]:
+    yes_wins = False
+    irreversible = day_complete
+    if contract.lower_c is None and contract.upper_c is not None:
+        yes_wins = observed <= contract.upper_c
+        if observed > contract.upper_c:
+            irreversible = True
+    elif contract.lower_c is not None and contract.upper_c is None:
+        yes_wins = observed >= contract.lower_c
+        if observed >= contract.lower_c:
+            irreversible = True
+    elif contract.lower_c is not None and contract.upper_c is not None:
+        yes_wins = contract.lower_c <= observed <= contract.upper_c
+    return yes_wins, irreversible
 
 
 def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> SettlementResult:
@@ -51,29 +70,50 @@ def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> Set
     elif icao.startswith("SB"):
         timezone_name = "America/Sao_Paulo"
 
+    day_complete = datetime.now(timezone.utc) > contract.target_date.replace(hour=23, minute=59)
+    resolution_source = str(candidate.get("resolution_source") or "")
+
+    official_observed = None
+    official_count = 0
+    official_note = ""
+    if "wunderground.com" in resolution_source.lower() or "weather.com" in resolution_source.lower():
+        official_observed, official_count, official_note = official_extreme_c(resolution_source, contract.target_date, contract.metric)
+        if official_observed is None:
+            metar_observed, metar_count = observed_extreme_c(icao, contract.target_date, timezone_name, contract.metric)
+            hint = f"; METAR reference {metar_observed}°C from {metar_count} obs at {icao}" if metar_observed is not None else ""
+            return SettlementResult(False, None, metar_observed, f"official source unavailable: {official_note}{hint}", "official_unavailable", metar_count)
+
+        yes_wins, irreversible = _evaluate_contract(contract, official_observed, day_complete)
+        if not irreversible:
+            return SettlementResult(
+                False,
+                None,
+                official_observed,
+                f"official tentative only: {official_count} weather.com/Wunderground obs, day not complete",
+                "official_wunderground",
+                official_count,
+            )
+        metar_observed, metar_count = observed_extreme_c(icao, contract.target_date, timezone_name, contract.metric)
+        compare = ""
+        if metar_observed is not None and abs(metar_observed - official_observed) > 0.6:
+            compare = f"; METAR differs ({metar_observed}°C from {metar_count} obs)"
+        side_wins = yes_wins if side.lower() == "yes" else not yes_wins
+        return SettlementResult(
+            True,
+            1.0 if side_wins else 0.0,
+            official_observed,
+            f"settled from official Wunderground/weather.com source: {official_count} obs at {icao}{compare}",
+            "official_wunderground",
+            official_count,
+        )
+
     observed, count = observed_extreme_c(icao, contract.target_date, timezone_name, contract.metric)
     if observed is None:
-        return SettlementResult(False, None, None, f"no METAR observations for {icao}")
+        return SettlementResult(False, None, None, f"no METAR observations for {icao}", "metar", 0)
 
-    day_complete = datetime.now(timezone.utc) > contract.target_date.replace(hour=23, minute=59)
-    # Same-day markets can be tentatively settled when the observed value already makes
-    # the selected side irreversible for one-sided buckets. Exact buckets remain tentative
-    # until day completion.
-    yes_wins = False
-    irreversible = day_complete
-    if contract.lower_c is None and contract.upper_c is not None:
-        yes_wins = observed <= contract.upper_c
-        if observed > contract.upper_c:
-            irreversible = True
-    elif contract.lower_c is not None and contract.upper_c is None:
-        yes_wins = observed >= contract.lower_c
-        if observed >= contract.lower_c:
-            irreversible = True
-    elif contract.lower_c is not None and contract.upper_c is not None:
-        yes_wins = contract.lower_c <= observed <= contract.upper_c
-
+    yes_wins, irreversible = _evaluate_contract(contract, observed, day_complete)
     if not irreversible:
-        return SettlementResult(False, None, observed, f"tentative only: {count} METAR obs, day not complete")
+        return SettlementResult(False, None, observed, f"tentative only: {count} METAR obs, day not complete", "metar_provisional", count)
 
     side_wins = yes_wins if side.lower() == "yes" else not yes_wins
-    return SettlementResult(True, 1.0 if side_wins else 0.0, observed, f"settled from {count} METAR obs at {icao}")
+    return SettlementResult(True, 1.0 if side_wins else 0.0, observed, f"settled from METAR fallback: {count} obs at {icao}", "metar_fallback", count)

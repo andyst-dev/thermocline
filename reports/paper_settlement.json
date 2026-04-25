@@ -1,66 +1,113 @@
 {
-  "settled": [],
-  "pending": [
-    {
-      "id": 14,
-      "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
-      "side": "No",
-      "observed_value_c": 27.8,
-      "notes": "tentative only: 24 METAR obs, day not complete"
-    },
-    {
-      "id": 12,
-      "question": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
-      "side": "No",
-      "observed_value_c": 18.3,
-      "notes": "tentative only: 27 METAR obs, day not complete"
-    },
+  "settled": [
     {
       "id": 11,
       "question": "Will the highest temperature in Chongqing be 31\u00b0C on April 25?",
       "side": "No",
-      "observed_value_c": 31.0,
-      "notes": "tentative only: 18 METAR obs, day not complete"
+      "entry_price": 0.001,
+      "exit_price": 0.0,
+      "size_usd": 1.0,
+      "paper_shares": 1000.0,
+      "pnl_usd": -1.0,
+      "observed_value_c": null,
+      "authority": "official_gamma",
+      "observation_count": 0,
+      "notes": "settled from official Polymarket Gamma closed outcome"
     },
     {
       "id": 7,
       "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 21.0,
-      "notes": "tentative only: 38 METAR obs, day not complete"
+      "entry_price": 0.004,
+      "exit_price": 0.0,
+      "size_usd": 1.0,
+      "paper_shares": 250.0,
+      "pnl_usd": -1.0,
+      "observed_value_c": null,
+      "authority": "official_gamma",
+      "observation_count": 0,
+      "notes": "settled from official Polymarket Gamma closed outcome"
     },
     {
       "id": 5,
       "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 23.0,
-      "notes": "tentative only: 41 METAR obs, day not complete"
+      "entry_price": 0.023,
+      "exit_price": 0.0,
+      "size_usd": 1.0,
+      "paper_shares": 43.48,
+      "pnl_usd": -1.0,
+      "observed_value_c": null,
+      "authority": "official_gamma",
+      "observation_count": 0,
+      "notes": "settled from official Polymarket Gamma closed outcome"
     },
     {
       "id": 4,
       "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 21.0,
-      "notes": "tentative only: 38 METAR obs, day not complete"
+      "entry_price": 0.001,
+      "exit_price": 0.0,
+      "size_usd": 1.0,
+      "paper_shares": 1000.0,
+      "pnl_usd": -1.0,
+      "observed_value_c": null,
+      "authority": "official_gamma",
+      "observation_count": 0,
+      "notes": "settled from official Polymarket Gamma closed outcome"
     },
     {
       "id": 3,
       "question": "Will the lowest temperature in Seoul be 9\u00b0C on April 25?",
       "side": "No",
-      "observed_value_c": 8.0,
-      "notes": "tentative only: 48 METAR obs, day not complete"
+      "entry_price": 0.004,
+      "exit_price": 0.0,
+      "size_usd": 1.0,
+      "paper_shares": 250.0,
+      "pnl_usd": -1.0,
+      "observed_value_c": null,
+      "authority": "official_gamma",
+      "observation_count": 0,
+      "notes": "settled from official Polymarket Gamma closed outcome"
     },
     {
       "id": 2,
       "question": "Will the highest temperature in Seoul be 20\u00b0C on April 25?",
       "side": "No",
-      "observed_value_c": 21.0,
-      "notes": "tentative only: 48 METAR obs, day not complete"
+      "entry_price": 0.001,
+      "exit_price": 0.0,
+      "size_usd": 1.0,
+      "paper_shares": 1000.0,
+      "pnl_usd": -1.0,
+      "observed_value_c": null,
+      "authority": "official_gamma",
+      "observation_count": 0,
+      "notes": "settled from official Polymarket Gamma closed outcome"
+    }
+  ],
+  "pending": [
+    {
+      "id": 14,
+      "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
+      "side": "No",
+      "observed_value_c": 29.0,
+      "authority": "official_wunderground",
+      "observation_count": 19,
+      "notes": "official tentative only: 19 weather.com/Wunderground obs, day not complete"
+    },
+    {
+      "id": 12,
+      "question": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
+      "side": "No",
+      "observed_value_c": 10.0,
+      "authority": "official_wunderground",
+      "observation_count": 21,
+      "notes": "official tentative only: 21 weather.com/Wunderground obs, day not complete"
     }
   ],
   "summary": {
-    "settled": 0,
-    "pending": 8,
-    "pnl_usd": 0
+    "settled": 6,
+    "pending": 2,
+    "pnl_usd": -6.0
   }
 }

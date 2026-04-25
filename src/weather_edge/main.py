@@ -7,7 +7,7 @@ from pathlib import Path
 from .audit import write_json_gz
 from .candidates import build_candidate
 from .clients.clob import simulate_buy_fill
-from .clients.polymarket import fetch_weather_markets
+from .clients.polymarket import fetch_market_by_id, fetch_weather_markets
 from .config import get_settings
 from .db import close_paper_trade, connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
 from .scanner import ScanSkip, filter_markets, scan_market
@@ -205,6 +205,34 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
     print(f"Saved report: {report_path}")
 
 
+def _gamma_official_settlement(settings, row, candidate: dict) -> dict | None:
+    try:
+        market = fetch_market_by_id(settings, str(row["market_id"]))
+    except Exception:
+        market = None
+    if market is None or not market.closed:
+        return None
+    side = str(row["side"])
+    try:
+        price_by_side = {str(label): float(price) for label, price in zip(market.outcomes, market.outcome_prices, strict=False)}
+    except (TypeError, ValueError):
+        return None
+    if side not in price_by_side:
+        return None
+    outcome_price = price_by_side[side]
+    if outcome_price < 0.99 and outcome_price > 0.01:
+        return None
+    shares = float(candidate.get("paper_shares") or 0.0)
+    pnl = shares * outcome_price - float(row["size_usd"])
+    return {
+        "outcome_price": 1.0 if outcome_price >= 0.99 else 0.0,
+        "pnl_usd": pnl,
+        "notes": "settled from official Polymarket Gamma closed outcome",
+        "authority": "official_gamma",
+        "observation_count": 0,
+    }
+
+
 def cmd_paper_settle() -> None:
     settings = get_settings()
     init_db(settings.db_path)
@@ -214,6 +242,30 @@ def cmd_paper_settle() -> None:
         rows = list_paper_trades(conn, "open")
         for row in rows:
             candidate = json.loads(row["candidate_json"])
+            gamma_result = _gamma_official_settlement(settings, row, candidate)
+            if gamma_result is not None:
+                close_paper_trade(
+                    conn,
+                    trade_id=int(row["id"]),
+                    exit_price=gamma_result["outcome_price"],
+                    pnl_usd=gamma_result["pnl_usd"],
+                    notes=gamma_result["notes"],
+                )
+                settled.append({
+                    "id": row["id"],
+                    "question": row["question"],
+                    "side": row["side"],
+                    "entry_price": row["entry_price"],
+                    "exit_price": gamma_result["outcome_price"],
+                    "size_usd": row["size_usd"],
+                    "paper_shares": round(float(candidate.get("paper_shares") or 0.0), 2),
+                    "pnl_usd": round(gamma_result["pnl_usd"], 4),
+                    "observed_value_c": None,
+                    "authority": gamma_result["authority"],
+                    "observation_count": gamma_result["observation_count"],
+                    "notes": gamma_result["notes"],
+                })
+                continue
             result = settle_candidate(candidate, row["question"], row["side"])
             if not result.can_settle or result.outcome_price is None:
                 pending.append({
@@ -221,6 +273,8 @@ def cmd_paper_settle() -> None:
                     "question": row["question"],
                     "side": row["side"],
                     "observed_value_c": result.observed_value_c,
+                    "authority": result.authority,
+                    "observation_count": result.observation_count,
                     "notes": result.notes,
                 })
                 continue
@@ -244,6 +298,8 @@ def cmd_paper_settle() -> None:
                 "paper_shares": round(shares, 2),
                 "pnl_usd": round(pnl, 4),
                 "observed_value_c": result.observed_value_c,
+                "authority": result.authority,
+                "observation_count": result.observation_count,
                 "notes": result.notes,
             })
     report = {"settled": settled, "pending": pending, "summary": {"settled": len(settled), "pending": len(pending), "pnl_usd": round(sum(x["pnl_usd"] for x in settled), 4)}}
