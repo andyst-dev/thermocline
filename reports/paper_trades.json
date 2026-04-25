@@ -1,9 +1,24 @@
 {
   "summary": {
-    "trades": 7,
-    "total_at_risk_usd": 7.0
+    "trades": 8,
+    "total_at_risk_usd": 8.0
   },
   "trades": [
+    {
+      "id": 8,
+      "status": "closed",
+      "question": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
+      "side": "Yes",
+      "entry_price": 0.003,
+      "size_usd": 1.0,
+      "paper_shares": 333.33,
+      "model_prob": 1.0,
+      "executable_ev": 0.997,
+      "score": 134.55,
+      "opened_at": "2026-04-25T12:31:09.698199+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/us/ny/new-york-city/KLGA",
+      "resolution_location": "KLGA"
+    },
     {
       "id": 7,
       "status": "open",

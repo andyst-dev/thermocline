@@ -23,30 +23,6 @@
       "resolution_location": "KLGA",
       "observed_metar_count": 27,
       "resolution_source": "https://www.wunderground.com/history/daily/us/ny/new-york-city/KLGA"
-    },
-    {
-      "verdict": "PASS",
-      "reason": "meets executable EV, liquidity, confidence, station and observation checks",
-      "score": 124.8419,
-      "market_id": "2056865",
-      "slug": "highest-temperature-in-london-on-april-25-2026-18c",
-      "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
-      "city": "London",
-      "target_date": "2026-04-25",
-      "side": "Yes",
-      "model_prob": 0.9044,
-      "gamma_price": 0.004,
-      "best_bid": 0.003,
-      "best_ask": 0.004,
-      "executable_ev": 0.9004,
-      "liquidity": 3334.68908,
-      "confidence": "high",
-      "forecast_value_c": 18.0,
-      "sigma_c": 0.3,
-      "horizon_hours": 0.0,
-      "resolution_location": "EGLC",
-      "observed_metar_count": 27,
-      "resolution_source": "https://www.wunderground.com/history/daily/gb/london/EGLC"
     }
   ],
   "size_usd": 1.0
