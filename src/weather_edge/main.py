@@ -148,7 +148,9 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
     selected = [c.as_dict() for c in candidates if c.verdict in allowed and c.best_ask is not None and c.side][:limit]
     opened = []
     with connect(settings.db_path) as conn:
-        existing = {(row["market_id"], row["side"]) for row in list_paper_trades(conn, "open")}
+        # Do not reopen the same market/side after settlement; otherwise repeated
+        # cycles inflate paper PnL by re-buying already-known outcomes.
+        existing = {(row["market_id"], row["side"]) for row in list_paper_trades(conn)}
         for candidate in selected:
             key = (candidate["market_id"], candidate["side"])
             if key in existing:

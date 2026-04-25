@@ -1,7 +1,19 @@
 {
   "settled": [
     {
-      "id": 8,
+      "id": 10,
+      "question": "Will the highest temperature in Chicago be 62\u00b0F or higher on April 25?",
+      "side": "Yes",
+      "entry_price": 0.051,
+      "exit_price": 1.0,
+      "size_usd": 1.0,
+      "paper_shares": 19.61,
+      "pnl_usd": 18.6078,
+      "observed_value_c": 19.4,
+      "notes": "settled from 24 METAR obs at KORD"
+    },
+    {
+      "id": 9,
       "question": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
       "side": "Yes",
       "entry_price": 0.003,
@@ -19,40 +31,40 @@
       "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 18.0,
-      "notes": "tentative only: 27 METAR obs, day not complete"
+      "notes": "tentative only: 28 METAR obs, day not complete"
     },
     {
       "id": 5,
       "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 21.0,
-      "notes": "tentative only: 29 METAR obs, day not complete"
+      "observed_value_c": 23.0,
+      "notes": "tentative only: 31 METAR obs, day not complete"
     },
     {
       "id": 4,
       "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 18.0,
-      "notes": "tentative only: 27 METAR obs, day not complete"
+      "notes": "tentative only: 28 METAR obs, day not complete"
     },
     {
       "id": 3,
       "question": "Will the lowest temperature in Seoul be 9\u00b0C on April 25?",
       "side": "No",
       "observed_value_c": 8.0,
-      "notes": "tentative only: 43 METAR obs, day not complete"
+      "notes": "tentative only: 44 METAR obs, day not complete"
     },
     {
       "id": 2,
       "question": "Will the highest temperature in Seoul be 20\u00b0C on April 25?",
       "side": "No",
       "observed_value_c": 21.0,
-      "notes": "tentative only: 43 METAR obs, day not complete"
+      "notes": "tentative only: 44 METAR obs, day not complete"
     }
   ],
   "summary": {
-    "settled": 1,
+    "settled": 2,
     "pending": 5,
-    "pnl_usd": 332.3333
+    "pnl_usd": 350.9411
   }
 }
