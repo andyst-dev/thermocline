@@ -1,18 +1,5 @@
 {
-  "settled": [
-    {
-      "id": 13,
-      "question": "Will the highest temperature in Denver be 59\u00b0F or below on April 25?",
-      "side": "No",
-      "entry_price": 0.07,
-      "exit_price": 1.0,
-      "size_usd": 1.0,
-      "paper_shares": 14.29,
-      "pnl_usd": 13.2857,
-      "observed_value_c": 22.2,
-      "notes": "settled from 25 METAR obs at KBKF"
-    }
-  ],
+  "settled": [],
   "pending": [
     {
       "id": 12,
@@ -33,21 +20,21 @@
       "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 21.0,
-      "notes": "tentative only: 36 METAR obs, day not complete"
+      "notes": "tentative only: 37 METAR obs, day not complete"
     },
     {
       "id": 5,
       "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 23.0,
-      "notes": "tentative only: 39 METAR obs, day not complete"
+      "notes": "tentative only: 40 METAR obs, day not complete"
     },
     {
       "id": 4,
       "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 21.0,
-      "notes": "tentative only: 36 METAR obs, day not complete"
+      "notes": "tentative only: 37 METAR obs, day not complete"
     },
     {
       "id": 3,
@@ -65,8 +52,8 @@
     }
   ],
   "summary": {
-    "settled": 1,
+    "settled": 0,
     "pending": 7,
-    "pnl_usd": 13.2857
+    "pnl_usd": 0
   }
 }
