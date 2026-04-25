@@ -227,6 +227,24 @@ def list_paper_trades(conn: sqlite3.Connection, status: str | None = None) -> li
     return list(conn.execute("SELECT * FROM paper_trades ORDER BY opened_at DESC"))
 
 
+def close_paper_trade(
+    conn: sqlite3.Connection,
+    *,
+    trade_id: int,
+    exit_price: float,
+    pnl_usd: float,
+    notes: str,
+) -> None:
+    conn.execute(
+        """
+        UPDATE paper_trades
+        SET status = 'closed', exit_price = ?, pnl_usd = ?, notes = ?, closed_at = ?
+        WHERE id = ? AND status = 'open'
+        """,
+        (exit_price, pnl_usd, notes, datetime.now(dt_timezone.utc).isoformat(), trade_id),
+    )
+
+
 def insert_scan(conn: sqlite3.Connection, scan: ScanResult) -> None:
     conn.execute(
         """

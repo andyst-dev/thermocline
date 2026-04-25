@@ -7,8 +7,9 @@ from pathlib import Path
 from .candidates import build_candidate
 from .clients.polymarket import fetch_weather_markets
 from .config import get_settings
-from .db import connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
+from .db import close_paper_trade, connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
 from .scanner import ScanSkip, filter_markets, scan_market
+from .settlement import settle_candidate
 
 
 def cmd_init_db() -> None:
@@ -160,6 +161,54 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
     print(f"Saved report: {report_path}")
 
 
+def cmd_paper_settle() -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    settled = []
+    pending = []
+    with connect(settings.db_path) as conn:
+        rows = list_paper_trades(conn, "open")
+        for row in rows:
+            candidate = json.loads(row["candidate_json"])
+            result = settle_candidate(candidate, row["question"], row["side"])
+            if not result.can_settle or result.outcome_price is None:
+                pending.append({
+                    "id": row["id"],
+                    "question": row["question"],
+                    "side": row["side"],
+                    "observed_value_c": result.observed_value_c,
+                    "notes": result.notes,
+                })
+                continue
+            shares = float(candidate.get("paper_shares") or 0.0)
+            exit_value = shares * result.outcome_price
+            pnl = exit_value - float(row["size_usd"])
+            close_paper_trade(
+                conn,
+                trade_id=int(row["id"]),
+                exit_price=result.outcome_price,
+                pnl_usd=pnl,
+                notes=result.notes,
+            )
+            settled.append({
+                "id": row["id"],
+                "question": row["question"],
+                "side": row["side"],
+                "entry_price": row["entry_price"],
+                "exit_price": result.outcome_price,
+                "size_usd": row["size_usd"],
+                "paper_shares": round(shares, 2),
+                "pnl_usd": round(pnl, 4),
+                "observed_value_c": result.observed_value_c,
+                "notes": result.notes,
+            })
+    report = {"settled": settled, "pending": pending, "summary": {"settled": len(settled), "pending": len(pending), "pnl_usd": round(sum(x["pnl_usd"] for x in settled), 4)}}
+    report_path = settings.project_root / "reports" / "paper_settlement.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    print(f"Saved report: {report_path}")
+
+
 def cmd_paper_report() -> None:
     settings = get_settings()
     init_db(settings.db_path)
@@ -211,6 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     paper_open.add_argument("--size-usd", type=float, default=1.0)
     paper_open.add_argument("--include-paper", action="store_true")
     sub.add_parser("paper-report")
+    sub.add_parser("paper-settle")
     sub.add_parser("run-once")
     return parser
 
@@ -230,6 +280,8 @@ def main() -> None:
         cmd_paper_open(limit=args.limit, size_usd=args.size_usd, include_paper=args.include_paper)
     elif args.command == "paper-report":
         cmd_paper_report()
+    elif args.command == "paper-settle":
+        cmd_paper_settle()
     elif args.command == "run-once":
         cmd_run_once()
     else:
