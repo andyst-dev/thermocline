@@ -17,6 +17,7 @@ class Settings:
     market_scan_pages: int = 60
     min_liquidity: float = 50.0
     report_limit: int = 25
+    max_open_positions: int = 25
     use_fixtures: bool = False
 
 
@@ -27,6 +28,7 @@ def get_settings() -> Settings:
     market_scan_pages = int(os.getenv("WEATHER_EDGE_MARKET_SCAN_PAGES", "120"))
     min_liquidity = float(os.getenv("WEATHER_EDGE_MIN_LIQUIDITY", "50"))
     report_limit = int(os.getenv("WEATHER_EDGE_REPORT_LIMIT", "25"))
+    max_open_positions = int(os.getenv("WEATHER_EDGE_MAX_OPEN_POSITIONS", "25"))
     use_fixtures = os.getenv("WEATHER_EDGE_USE_FIXTURES", "0").lower() in {"1", "true", "yes"}
     return Settings(
         project_root=project_root,
@@ -35,5 +37,6 @@ def get_settings() -> Settings:
         market_scan_pages=market_scan_pages,
         min_liquidity=min_liquidity,
         report_limit=report_limit,
+        max_open_positions=max_open_positions,
         use_fixtures=use_fixtures,
     )

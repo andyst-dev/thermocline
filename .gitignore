@@ -4,3 +4,7 @@ logs/*
 !logs/.gitkeep
 __pycache__/
 *.pyc
+
+data/backups/
+data/*.db-wal
+data/*.db-shm

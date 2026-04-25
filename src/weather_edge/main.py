@@ -186,8 +186,14 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
     with connect(settings.db_path) as conn:
         # Do not open multiple sides/buckets for the same market in paper. They are
         # correlated/contradictory and can inflate apparent edge.
-        existing = {row["market_id"] for row in list_paper_trades(conn)}
+        all_rows = list_paper_trades(conn)
+        existing = {row["market_id"] for row in all_rows}
+        open_count = sum(1 for row in all_rows if row["status"] == "open")
+        if open_count >= settings.max_open_positions:
+            selected = []
         for candidate in selected:
+            if open_count + len(opened) >= settings.max_open_positions:
+                break
             if len(opened) >= limit:
                 break
             key = candidate["market_id"]
@@ -208,7 +214,8 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
 def _gamma_official_settlement(settings, row, candidate: dict) -> dict | None:
     try:
         market = fetch_market_by_id(settings, str(row["market_id"]))
-    except Exception:
+    except Exception as exc:
+        print(f"WARNING: Gamma settlement fetch failed for market {row['market_id']}: {exc}", flush=True)
         market = None
     if market is None or not market.closed:
         return None
@@ -223,7 +230,16 @@ def _gamma_official_settlement(settings, row, candidate: dict) -> dict | None:
     if outcome_price < 0.99 and outcome_price > 0.01:
         return None
     shares = float(candidate.get("paper_shares") or 0.0)
-    pnl = shares * outcome_price - float(row["size_usd"])
+    size_usd = float(row["size_usd"])
+    entry_price = float(row["entry_price"])
+    if shares <= 0 or size_usd <= 0 or entry_price <= 0:
+        print(f"WARNING: invalid paper trade economics for trade {row['id']}", flush=True)
+        return None
+    pnl = shares * outcome_price - size_usd
+    max_pnl = size_usd * (1.0 / entry_price - 1.0)
+    if pnl < -size_usd - 1e-9 or pnl > max_pnl + 1e-9:
+        print(f"WARNING: implausible paper PnL for trade {row['id']}: {pnl}", flush=True)
+        return None
     return {
         "outcome_price": 1.0 if outcome_price >= 0.99 else 0.0,
         "pnl_usd": pnl,

@@ -2,6 +2,51 @@
   "settled": [],
   "pending": [
     {
+      "id": 24,
+      "question": "Will the highest temperature in Shenzhen be 23\u00b0C on April 26?",
+      "side": "Yes",
+      "observed_value_c": null,
+      "authority": "official_unavailable",
+      "observation_count": 0,
+      "notes": "official source unavailable: weather.com historical fetch failed for ZGSZ: HTTP Error 400: Bad Request"
+    },
+    {
+      "id": 23,
+      "question": "Will the highest temperature in Seoul be 15\u00b0C on April 26?",
+      "side": "Yes",
+      "observed_value_c": 15.0,
+      "authority": "official_unavailable",
+      "observation_count": 18,
+      "notes": "official source unavailable: weather.com historical fetch failed for RKSI: HTTP Error 400: Bad Request; METAR reference 15.0\u00b0C from 18 obs at RKSI"
+    },
+    {
+      "id": 22,
+      "question": "Will the highest temperature in Singapore be 28\u00b0C on April 26?",
+      "side": "Yes",
+      "observed_value_c": null,
+      "authority": "official_unavailable",
+      "observation_count": 0,
+      "notes": "official source unavailable: weather.com historical fetch failed for WSSS: HTTP Error 400: Bad Request"
+    },
+    {
+      "id": 21,
+      "question": "Will the highest temperature in Buenos Aires be 20\u00b0C or higher on April 26?",
+      "side": "Yes",
+      "observed_value_c": 24.0,
+      "authority": "official_unavailable",
+      "observation_count": 29,
+      "notes": "official source unavailable: weather.com historical fetch failed for SAEZ: HTTP Error 400: Bad Request; METAR reference 24.0\u00b0C from 29 obs at SAEZ"
+    },
+    {
+      "id": 20,
+      "question": "Will the highest temperature in Panama City be 30\u00b0C on April 25?",
+      "side": "No",
+      "observed_value_c": 30.0,
+      "authority": "official_unavailable",
+      "observation_count": 27,
+      "notes": "official source unavailable: weather.com historical fetch failed for MPMG: HTTP Error 400: Bad Request; METAR reference 30.0\u00b0C from 27 obs at MPMG"
+    },
+    {
       "id": 19,
       "question": "Will the highest temperature in Taipei be 23\u00b0C or below on April 26?",
       "side": "Yes",
@@ -61,8 +106,8 @@
       "side": "No",
       "observed_value_c": 13.0,
       "authority": "official_wunderground_provisional",
-      "observation_count": 19,
-      "notes": "provisional Wunderground/weather.com observation only (tentative/day not complete): 19 obs at KBKF; METAR differs (22.2\u00b0C from 25 obs); wait for Polymarket Gamma closed outcome before counting PnL"
+      "observation_count": 20,
+      "notes": "provisional Wunderground/weather.com observation only (tentative/day not complete): 20 obs at KBKF; METAR differs (22.2\u00b0C from 25 obs); wait for Polymarket Gamma closed outcome before counting PnL"
     },
     {
       "id": 12,
@@ -79,8 +124,8 @@
       "side": "Yes",
       "observed_value_c": 13.0,
       "authority": "official_wunderground_provisional",
-      "observation_count": 31,
-      "notes": "provisional Wunderground/weather.com observation only (tentative/day not complete): 31 obs at KORD; METAR differs (21.7\u00b0C from 25 obs); wait for Polymarket Gamma closed outcome before counting PnL"
+      "observation_count": 32,
+      "notes": "provisional Wunderground/weather.com observation only (tentative/day not complete): 32 obs at KORD; METAR differs (21.7\u00b0C from 25 obs); wait for Polymarket Gamma closed outcome before counting PnL"
     },
     {
       "id": 1,
@@ -94,7 +139,7 @@
   ],
   "summary": {
     "settled": 0,
-    "pending": 10,
+    "pending": 15,
     "pnl_usd": 0
   }
 }

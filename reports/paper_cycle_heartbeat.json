@@ -1,5 +1,21 @@
 {
-  "finished_at": "2026-04-25T23:37:44.079882+00:00",
+  "finished_at": "2026-04-25T23:45:44.193576+00:00",
   "exit_code": 0,
-  "status": "ok"
+  "status": "ok",
+  "backup": "data/backups/weather_edge-2026-04-25.db.gz",
+  "summary": {
+    "paper_trades": {
+      "trades": 21,
+      "closed": 6,
+      "open": 15,
+      "duplicates_excluded": 3,
+      "total_at_risk_usd": 21.0,
+      "closed_pnl_usd": -6.0
+    },
+    "paper_settlement": {
+      "settled": 0,
+      "pending": 15,
+      "pnl_usd": 0
+    }
+  }
 }
