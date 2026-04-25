@@ -23,6 +23,9 @@ class Candidate:
     best_ask: float | None
     executable_ev: float | None
     ask_capacity_usd: float | None
+    fill_avg_price: float | None
+    fill_shares: float | None
+    fill_cost_usd: float | None
     liquidity: float
     confidence: str
     forecast_value_c: float
@@ -49,6 +52,9 @@ class Candidate:
             "best_ask": self.best_ask,
             "executable_ev": round(self.executable_ev, 4) if self.executable_ev is not None else None,
             "ask_capacity_usd": round(self.ask_capacity_usd, 4) if self.ask_capacity_usd is not None else None,
+            "fill_avg_price": round(self.fill_avg_price, 6) if self.fill_avg_price is not None else None,
+            "fill_shares": round(self.fill_shares, 4) if self.fill_shares is not None else None,
+            "fill_cost_usd": round(self.fill_cost_usd, 4) if self.fill_cost_usd is not None else None,
             "liquidity": self.liquidity,
             "confidence": self.confidence,
             "forecast_value_c": round(self.forecast_value_c, 2),
@@ -82,8 +88,8 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         cautions.append("global climate market, not target city weather niche")
     if top and top.best_ask is None:
         blockers.append("no executable ask found")
-    if top and (top.ask_capacity_usd is None or top.ask_capacity_usd < 1.0):
-        blockers.append("insufficient ask depth for $1 paper fill")
+    if top and (top.fill_cost_usd is None or top.fill_cost_usd < 0.999):
+        blockers.append("insufficient depth for $1 walk-the-book fill")
     if top and top.best_ask is not None and top.best_ask > 0.10:
         cautions.append("ask above cheap-tail threshold")
     if top and top.executable_ev is not None and top.executable_ev < 0.15:
@@ -105,6 +111,9 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     model_prob = top.model_prob if top else None
     gamma_price = top.market_prob if top else None
     ask_capacity = top.ask_capacity_usd if top else None
+    fill_avg_price = top.fill_avg_price if top else None
+    fill_shares = top.fill_shares if top else None
+    fill_cost_usd = top.fill_cost_usd if top else None
 
     score = 0.0
     if exec_ev is not None:
@@ -146,6 +155,9 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         best_ask=ask,
         executable_ev=exec_ev,
         ask_capacity_usd=ask_capacity,
+        fill_avg_price=fill_avg_price,
+        fill_shares=fill_shares,
+        fill_cost_usd=fill_cost_usd,
         liquidity=result.liquidity,
         confidence=result.confidence,
         forecast_value_c=result.forecast_max_c,

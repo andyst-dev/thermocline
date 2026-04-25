@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from .clients.aviationweather import observed_extreme_c
-from .clients.clob import best_bid_ask_capacity
+from .clients.clob import simulate_buy_fill
 from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
 from .config import Settings
@@ -37,12 +37,15 @@ def _enrich_with_clob(settings: Settings, market: WeatherMarket, buckets: list[B
         token_id = token_by_label.get(bucket.label)
         if not token_id:
             continue
-        bid, ask, ask_capacity = best_bid_ask_capacity(settings, token_id)
-        bucket.best_bid = bid
-        bucket.best_ask = ask
-        bucket.ask_capacity_usd = ask_capacity
-        if ask is not None:
-            bucket.executable_ev = bucket.model_prob - ask
+        fill = simulate_buy_fill(settings, token_id, usd_size=1.0)
+        bucket.best_bid = fill.best_bid
+        bucket.best_ask = fill.best_ask
+        bucket.ask_capacity_usd = fill.capacity_usd_at_best_ask
+        bucket.fill_avg_price = fill.avg_price
+        bucket.fill_shares = fill.shares
+        bucket.fill_cost_usd = fill.cost_usd
+        if fill.filled and fill.avg_price is not None:
+            bucket.executable_ev = bucket.model_prob - fill.avg_price
 
 
 def _sort_buckets(buckets: list[BucketProbability]) -> None:

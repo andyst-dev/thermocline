@@ -230,6 +230,8 @@ def cmd_paper_report() -> None:
             "question": row["question"],
             "side": row["side"],
             "entry_price": row["entry_price"],
+            "fill_avg_price": candidate.get("fill_avg_price"),
+            "fill_cost_usd": candidate.get("fill_cost_usd"),
             "size_usd": row["size_usd"],
             "paper_shares": round(float(shares or 0.0), 2),
             "model_prob": row["model_prob"],

@@ -191,7 +191,7 @@ def insert_paper_trade(
     notes: str = "",
 ) -> None:
     now = datetime.now(dt_timezone.utc).isoformat()
-    entry_price = float(candidate["best_ask"])
+    entry_price = float(candidate.get("fill_avg_price") or candidate["best_ask"])
     shares = size_usd / entry_price if entry_price > 0 else 0.0
     enriched = dict(candidate)
     enriched["paper_shares"] = shares
