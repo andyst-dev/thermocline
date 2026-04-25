@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from .clients.aviationweather import observed_extreme_c
-from .clients.clob import best_bid_ask
+from .clients.clob import best_bid_ask_capacity
 from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
 from .config import Settings
@@ -31,9 +31,10 @@ def _enrich_with_clob(settings: Settings, market: WeatherMarket, buckets: list[B
         token_id = token_by_label.get(bucket.label)
         if not token_id:
             continue
-        bid, ask = best_bid_ask(settings, token_id)
+        bid, ask, ask_capacity = best_bid_ask_capacity(settings, token_id)
         bucket.best_bid = bid
         bucket.best_ask = ask
+        bucket.ask_capacity_usd = ask_capacity
         if ask is not None:
             bucket.executable_ev = bucket.model_prob - ask
 

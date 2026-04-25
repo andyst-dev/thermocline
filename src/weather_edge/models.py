@@ -42,6 +42,7 @@ class BucketProbability:
     best_bid: float | None = None
     best_ask: float | None = None
     executable_ev: float | None = None
+    ask_capacity_usd: float | None = None
 
 
 @dataclass
