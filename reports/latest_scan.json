@@ -1,35 +1,35 @@
 {
   "results": [
     {
-      "market": "Highest temperature in Tokyo on April 26, 2026?",
-      "city": "Tokyo",
-      "date": "2026-04-26",
-      "forecast_max_c": 20.0,
-      "sigma_c": 4.51,
-      "top_bucket": "<16",
-      "top_bucket_ev": 0.1474,
-      "confidence": "low",
-      "liquidity": 500.0
-    },
-    {
-      "market": "Highest temperature in Buenos Aires on April 24, 2026?",
+      "market": "Highest temperature in Buenos Aires on April 27, 2026?",
       "city": "Buenos Aires",
-      "date": "2026-04-24",
-      "forecast_max_c": 21.0,
-      "sigma_c": 2.84,
+      "date": "2026-04-27",
+      "forecast_max_c": 16.4,
+      "sigma_c": 2.76,
       "top_bucket": "<18",
-      "top_bucket_ev": 0.0955,
+      "top_bucket_ev": 0.6689,
       "confidence": "low",
       "liquidity": 500.0
     },
     {
-      "market": "Highest temperature in Chicago on April 25, 2026?",
+      "market": "Highest temperature in Tokyo on April 29, 2026?",
+      "city": "Tokyo",
+      "date": "2026-04-29",
+      "forecast_max_c": 18.8,
+      "sigma_c": 4.43,
+      "top_bucket": "<16",
+      "top_bucket_ev": 0.2236,
+      "confidence": "low",
+      "liquidity": 500.0
+    },
+    {
+      "market": "Highest temperature in Chicago on April 28, 2026?",
       "city": "Chicago",
-      "date": "2026-04-25",
-      "forecast_max_c": 17.8,
-      "sigma_c": 3.67,
+      "date": "2026-04-28",
+      "forecast_max_c": 17.0,
+      "sigma_c": 3.59,
       "top_bucket": "22+",
-      "top_bucket_ev": 0.0565,
+      "top_bucket_ev": 0.0121,
       "confidence": "low",
       "liquidity": 500.0
     }
