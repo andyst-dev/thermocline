@@ -12,4 +12,4 @@ Cycle steps:
 3. settle irreversible paper trades from METAR observations
 4. write paper report
 
-Cron is configured outside the project to run this every 30 minutes.
+System cron runs this every 30 minutes without waking the agent. OpenClaw cron only wakes Laurel every 12 hours to review reports and notify Andy on material changes.
