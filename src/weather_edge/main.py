@@ -242,6 +242,15 @@ def cmd_paper_report() -> None:
     print(f"Saved report: {report_path}")
 
 
+def cmd_paper_cycle() -> None:
+    # Conservative unattended loop: refresh candidates, open a few PASS-only paper
+    # positions, settle irreversible/open positions, then write the current report.
+    cmd_verify_candidates()
+    cmd_paper_open(limit=5, size_usd=1.0, include_paper=False)
+    cmd_paper_settle()
+    cmd_paper_report()
+
+
 def cmd_run_once() -> None:
     cmd_init_db()
     cmd_fetch_markets()
@@ -261,6 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     paper_open.add_argument("--include-paper", action="store_true")
     sub.add_parser("paper-report")
     sub.add_parser("paper-settle")
+    sub.add_parser("paper-cycle")
     sub.add_parser("run-once")
     return parser
 
@@ -282,6 +292,8 @@ def main() -> None:
         cmd_paper_report()
     elif args.command == "paper-settle":
         cmd_paper_settle()
+    elif args.command == "paper-cycle":
+        cmd_paper_cycle()
     elif args.command == "run-once":
         cmd_run_once()
     else:

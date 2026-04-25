@@ -1,9 +1,39 @@
 {
   "summary": {
-    "trades": 5,
-    "total_at_risk_usd": 5.0
+    "trades": 7,
+    "total_at_risk_usd": 7.0
   },
   "trades": [
+    {
+      "id": 7,
+      "status": "open",
+      "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
+      "side": "Yes",
+      "entry_price": 0.004,
+      "size_usd": 1.0,
+      "paper_shares": 250.0,
+      "model_prob": 0.9044,
+      "executable_ev": 0.9004,
+      "score": 124.8419,
+      "opened_at": "2026-04-25T12:29:03.887065+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/gb/london/EGLC",
+      "resolution_location": "EGLC"
+    },
+    {
+      "id": 6,
+      "status": "closed",
+      "question": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
+      "side": "Yes",
+      "entry_price": 0.003,
+      "size_usd": 1.0,
+      "paper_shares": 333.33,
+      "model_prob": 1.0,
+      "executable_ev": 0.997,
+      "score": 134.55,
+      "opened_at": "2026-04-25T12:29:03.886909+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/us/ny/new-york-city/KLGA",
+      "resolution_location": "KLGA"
+    },
     {
       "id": 5,
       "status": "open",

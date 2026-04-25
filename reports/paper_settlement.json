@@ -1,19 +1,26 @@
 {
   "settled": [
     {
-      "id": 1,
+      "id": 6,
       "question": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
       "side": "Yes",
-      "entry_price": 0.004,
+      "entry_price": 0.003,
       "exit_price": 1.0,
       "size_usd": 1.0,
-      "paper_shares": 250.0,
-      "pnl_usd": 249.0,
+      "paper_shares": 333.33,
+      "pnl_usd": 332.3333,
       "observed_value_c": 18.3,
       "notes": "settled from 27 METAR obs at KLGA"
     }
   ],
   "pending": [
+    {
+      "id": 7,
+      "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
+      "side": "Yes",
+      "observed_value_c": 18.0,
+      "notes": "tentative only: 27 METAR obs, day not complete"
+    },
     {
       "id": 5,
       "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
@@ -25,8 +32,8 @@
       "id": 4,
       "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 16.0,
-      "notes": "tentative only: 26 METAR obs, day not complete"
+      "observed_value_c": 18.0,
+      "notes": "tentative only: 27 METAR obs, day not complete"
     },
     {
       "id": 3,
@@ -45,7 +52,7 @@
   ],
   "summary": {
     "settled": 1,
-    "pending": 4,
-    "pnl_usd": 249.0
+    "pending": 5,
+    "pnl_usd": 332.3333
   }
 }
