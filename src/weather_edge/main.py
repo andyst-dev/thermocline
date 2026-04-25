@@ -4,7 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
+from .audit import write_json_gz
 from .candidates import build_candidate
+from .clients.clob import simulate_buy_fill
 from .clients.polymarket import fetch_weather_markets
 from .config import get_settings
 from .db import close_paper_trade, connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
@@ -141,22 +143,62 @@ def cmd_verify_candidates() -> None:
     print(f"Saved report: {report_path}")
 
 
+def _refresh_candidate_fill_for_open(settings, candidate: dict, size_usd: float) -> dict | None:
+    token_id = candidate.get("token_id")
+    model_prob = candidate.get("model_prob")
+    if not token_id or model_prob is None:
+        return None
+    fill = simulate_buy_fill(settings, str(token_id), usd_size=size_usd)
+    if not fill.filled or fill.avg_price is None or fill.cost_usd < size_usd * 0.999:
+        return None
+    path, digest = write_json_gz(
+        settings.project_root,
+        kind="books",
+        name=str(token_id)[:16],
+        payload=fill.book_payload,
+        fetched_at=fill.book_fetched_at,
+    )
+    refreshed = dict(candidate)
+    refreshed.update(
+        {
+            "best_bid": fill.best_bid,
+            "best_ask": fill.best_ask,
+            "ask_capacity_usd": fill.capacity_usd_at_best_ask,
+            "fill_avg_price": fill.avg_price,
+            "fill_shares": fill.shares,
+            "fill_cost_usd": fill.cost_usd,
+            "fill_levels_json": json.dumps(fill.levels_used),
+            "book_fetched_at": fill.book_fetched_at,
+            "book_snapshot_path": path,
+            "book_snapshot_hash": digest,
+            "executable_ev": float(model_prob) - fill.avg_price,
+        }
+    )
+    return refreshed
+
+
 def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> None:
     settings = get_settings()
     candidates, _skipped = _generate_candidates(settings)
     allowed = {"PASS", "PAPER"} if include_paper else {"PASS"}
-    selected = [c.as_dict() for c in candidates if c.verdict in allowed and c.best_ask is not None and c.side][:limit]
+    selected = [c.as_dict() for c in candidates if c.verdict in allowed and c.best_ask is not None and c.side]
     opened = []
     with connect(settings.db_path) as conn:
         # Do not open multiple sides/buckets for the same market in paper. They are
         # correlated/contradictory and can inflate apparent edge.
         existing = {row["market_id"] for row in list_paper_trades(conn)}
         for candidate in selected:
+            if len(opened) >= limit:
+                break
             key = candidate["market_id"]
             if key in existing:
                 continue
-            insert_paper_trade(conn, candidate=candidate, size_usd=size_usd, notes="auto paper-open from verified candidates")
-            opened.append(candidate)
+            refreshed = _refresh_candidate_fill_for_open(settings, candidate, size_usd)
+            if refreshed is None:
+                continue
+            insert_paper_trade(conn, candidate=refreshed, size_usd=size_usd, notes="auto paper-open from verified candidates")
+            opened.append(refreshed)
+            existing.add(key)
     report_path = settings.project_root / "reports" / "paper_opened.json"
     report_path.write_text(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2), encoding="utf-8")
     print(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2))

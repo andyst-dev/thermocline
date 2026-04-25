@@ -1,0 +1,6 @@
+data/snapshots/
+logs/*
+!logs/.gitignore
+!logs/.gitkeep
+__pycache__/
+*.pyc

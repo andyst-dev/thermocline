@@ -26,6 +26,11 @@ class Candidate:
     fill_avg_price: float | None
     fill_shares: float | None
     fill_cost_usd: float | None
+    fill_levels_json: str | None
+    book_fetched_at: str | None
+    book_snapshot_path: str | None
+    book_snapshot_hash: str | None
+    token_id: str | None
     liquidity: float
     confidence: str
     forecast_value_c: float
@@ -55,6 +60,11 @@ class Candidate:
             "fill_avg_price": round(self.fill_avg_price, 6) if self.fill_avg_price is not None else None,
             "fill_shares": round(self.fill_shares, 4) if self.fill_shares is not None else None,
             "fill_cost_usd": round(self.fill_cost_usd, 4) if self.fill_cost_usd is not None else None,
+            "fill_levels_json": self.fill_levels_json,
+            "book_fetched_at": self.book_fetched_at,
+            "book_snapshot_path": self.book_snapshot_path,
+            "book_snapshot_hash": self.book_snapshot_hash,
+            "token_id": self.token_id,
             "liquidity": self.liquidity,
             "confidence": self.confidence,
             "forecast_value_c": round(self.forecast_value_c, 2),
@@ -114,6 +124,11 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     fill_avg_price = top.fill_avg_price if top else None
     fill_shares = top.fill_shares if top else None
     fill_cost_usd = top.fill_cost_usd if top else None
+    fill_levels_json = top.fill_levels_json if top else None
+    book_fetched_at = top.book_fetched_at if top else None
+    book_snapshot_path = top.book_snapshot_path if top else None
+    book_snapshot_hash = top.book_snapshot_hash if top else None
+    token_id = top.token_id if top else None
 
     score = 0.0
     if exec_ev is not None:
@@ -158,6 +173,11 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         fill_avg_price=fill_avg_price,
         fill_shares=fill_shares,
         fill_cost_usd=fill_cost_usd,
+        fill_levels_json=fill_levels_json,
+        book_fetched_at=book_fetched_at,
+        book_snapshot_path=book_snapshot_path,
+        book_snapshot_hash=book_snapshot_hash,
+        token_id=token_id,
         liquidity=result.liquidity,
         confidence=result.confidence,
         forecast_value_c=result.forecast_max_c,

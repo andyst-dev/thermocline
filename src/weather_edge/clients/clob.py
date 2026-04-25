@@ -22,6 +22,7 @@ class FillSimulation:
     capacity_usd_at_best_ask: float | None
     levels_used: list[dict[str, float]]
     book_fetched_at: str
+    book_payload: dict[str, Any]
 
 
 def fetch_book(settings: Settings, token_id: str, *, use_cache: bool = False) -> dict[str, Any]:
@@ -82,7 +83,7 @@ def simulate_buy_fill(settings: Settings, token_id: str, usd_size: float = 1.0, 
     best_ask = min(asks) if asks else None
     fetched_at = str(book.get("_fetched_at") or datetime.now(timezone.utc).isoformat())
     if best_ask is None:
-        return FillSimulation(best_bid, None, None, 0.0, 0.0, usd_size, False, None, [], fetched_at)
+        return FillSimulation(best_bid, None, None, 0.0, 0.0, usd_size, False, None, [], fetched_at, book)
 
     capacity_at_best = sum(_size(level) * float(level["price"]) for level in ask_levels if float(level["price"]) <= best_ask)
     remaining = usd_size
@@ -106,4 +107,4 @@ def simulate_buy_fill(settings: Settings, token_id: str, usd_size: float = 1.0, 
             break
     avg = cost / shares if shares > 0 else None
     filled = remaining <= 1e-9 and avg is not None and avg <= max_avg_price
-    return FillSimulation(best_bid, best_ask, avg, shares, cost, usd_size, filled, capacity_at_best, levels_used, fetched_at)
+    return FillSimulation(best_bid, best_ask, avg, shares, cost, usd_size, filled, capacity_at_best, levels_used, fetched_at, book)

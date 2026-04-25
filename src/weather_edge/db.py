@@ -60,6 +60,29 @@ CREATE TABLE IF NOT EXISTS scans (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS book_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    market_id TEXT NOT NULL,
+    side TEXT NOT NULL,
+    token_id TEXT,
+    fetched_at TEXT,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_trade_id INTEGER NOT NULL,
+    requested_usd REAL NOT NULL,
+    avg_price REAL,
+    shares REAL,
+    cost_usd REAL,
+    levels_used_json TEXT,
+    book_snapshot_id INTEGER,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS paper_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     market_id TEXT NOT NULL,
@@ -85,6 +108,8 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 CREATE INDEX IF NOT EXISTS idx_scans_market_created ON scans(market_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_forecasts_market_created ON forecasts(market_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades(status, opened_at DESC);
+CREATE INDEX IF NOT EXISTS idx_book_snapshots_market ON book_snapshots(market_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fills_trade ON fills(paper_trade_id);
 """
 
 
@@ -183,6 +208,29 @@ def insert_forecast(
     )
 
 
+def _insert_book_snapshot(conn: sqlite3.Connection, candidate: dict) -> int | None:
+    path = candidate.get("book_snapshot_path")
+    digest = candidate.get("book_snapshot_hash")
+    if not path or not digest:
+        return None
+    cur = conn.execute(
+        """
+        INSERT INTO book_snapshots(market_id, side, token_id, fetched_at, path, sha256, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            candidate["market_id"],
+            candidate["side"],
+            candidate.get("token_id"),
+            candidate.get("book_fetched_at"),
+            path,
+            digest,
+            datetime.now(dt_timezone.utc).isoformat(),
+        ),
+    )
+    return int(cur.lastrowid)
+
+
 def insert_paper_trade(
     conn: sqlite3.Connection,
     *,
@@ -195,7 +243,8 @@ def insert_paper_trade(
     shares = size_usd / entry_price if entry_price > 0 else 0.0
     enriched = dict(candidate)
     enriched["paper_shares"] = shares
-    conn.execute(
+    book_snapshot_id = _insert_book_snapshot(conn, candidate)
+    cur = conn.execute(
         """
         INSERT INTO paper_trades(
             market_id, slug, question, side, entry_price, size_usd,
@@ -216,6 +265,25 @@ def insert_paper_trade(
             candidate.get("verdict"),
             notes,
             json.dumps(enriched),
+            now,
+        ),
+    )
+    paper_trade_id = int(cur.lastrowid)
+    conn.execute(
+        """
+        INSERT INTO fills(
+            paper_trade_id, requested_usd, avg_price, shares, cost_usd,
+            levels_used_json, book_snapshot_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            paper_trade_id,
+            size_usd,
+            candidate.get("fill_avg_price"),
+            candidate.get("fill_shares"),
+            candidate.get("fill_cost_usd"),
+            candidate.get("fill_levels_json"),
+            book_snapshot_id,
             now,
         ),
     )

@@ -46,6 +46,11 @@ class BucketProbability:
     fill_avg_price: float | None = None
     fill_shares: float | None = None
     fill_cost_usd: float | None = None
+    fill_levels_json: str | None = None
+    book_fetched_at: str | None = None
+    book_snapshot_path: str | None = None
+    book_snapshot_hash: str | None = None
+    token_id: str | None = None
 
 
 @dataclass

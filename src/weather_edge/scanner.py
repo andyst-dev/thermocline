@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 
@@ -38,12 +39,15 @@ def _enrich_with_clob(settings: Settings, market: WeatherMarket, buckets: list[B
         if not token_id:
             continue
         fill = simulate_buy_fill(settings, token_id, usd_size=1.0)
+        bucket.token_id = token_id
         bucket.best_bid = fill.best_bid
         bucket.best_ask = fill.best_ask
         bucket.ask_capacity_usd = fill.capacity_usd_at_best_ask
         bucket.fill_avg_price = fill.avg_price
         bucket.fill_shares = fill.shares
         bucket.fill_cost_usd = fill.cost_usd
+        bucket.fill_levels_json = json.dumps(fill.levels_used)
+        bucket.book_fetched_at = fill.book_fetched_at
         if fill.filled and fill.avg_price is not None:
             bucket.executable_ev = bucket.model_prob - fill.avg_price
 
