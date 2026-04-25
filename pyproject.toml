@@ -1,0 +1,8 @@
+[project]
+name = "weather-edge"
+version = "0.1.0"
+description = "Local-first scanner for weather market inefficiencies"
+requires-python = ">=3.12"
+
+[tool.pyright]
+include = ["src"]
