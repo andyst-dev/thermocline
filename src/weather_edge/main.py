@@ -7,7 +7,7 @@ from pathlib import Path
 from .candidates import build_candidate
 from .clients.polymarket import fetch_weather_markets
 from .config import get_settings
-from .db import connect, init_db, insert_forecast, insert_scan, upsert_markets
+from .db import connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
 from .scanner import ScanSkip, filter_markets, scan_market
 
 
@@ -82,8 +82,7 @@ def cmd_scan() -> None:
         print(f"Skipped: {len(skipped)} markets")
 
 
-def cmd_verify_candidates() -> None:
-    settings = get_settings()
+def _generate_candidates(settings):
     init_db(settings.db_path)
     markets = filter_markets(fetch_weather_markets(settings), settings.min_liquidity)
     candidates = []
@@ -111,8 +110,13 @@ def cmd_verify_candidates() -> None:
             )
             insert_scan(conn, result)
             candidates.append(build_candidate(market, result, forecast_meta))
-
     candidates.sort(key=lambda c: (c.verdict == "PASS", c.verdict == "PAPER", c.score), reverse=True)
+    return candidates, skipped
+
+
+def cmd_verify_candidates() -> None:
+    settings = get_settings()
+    candidates, skipped = _generate_candidates(settings)
     output = [candidate.as_dict() for candidate in candidates[: settings.report_limit]]
     report = {
         "policy": {
@@ -136,6 +140,59 @@ def cmd_verify_candidates() -> None:
     print(f"Saved report: {report_path}")
 
 
+def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> None:
+    settings = get_settings()
+    candidates, _skipped = _generate_candidates(settings)
+    allowed = {"PASS", "PAPER"} if include_paper else {"PASS"}
+    selected = [c.as_dict() for c in candidates if c.verdict in allowed and c.best_ask is not None and c.side][:limit]
+    opened = []
+    with connect(settings.db_path) as conn:
+        existing = {(row["market_id"], row["side"]) for row in list_paper_trades(conn, "open")}
+        for candidate in selected:
+            key = (candidate["market_id"], candidate["side"])
+            if key in existing:
+                continue
+            insert_paper_trade(conn, candidate=candidate, size_usd=size_usd, notes="auto paper-open from verified candidates")
+            opened.append(candidate)
+    report_path = settings.project_root / "reports" / "paper_opened.json"
+    report_path.write_text(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2), encoding="utf-8")
+    print(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2))
+    print(f"Saved report: {report_path}")
+
+
+def cmd_paper_report() -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    with connect(settings.db_path) as conn:
+        rows = list_paper_trades(conn)
+    trades = []
+    total_at_risk = 0.0
+    for row in rows:
+        candidate = json.loads(row["candidate_json"])
+        shares = candidate.get("paper_shares")
+        total_at_risk += float(row["size_usd"])
+        trades.append({
+            "id": row["id"],
+            "status": row["status"],
+            "question": row["question"],
+            "side": row["side"],
+            "entry_price": row["entry_price"],
+            "size_usd": row["size_usd"],
+            "paper_shares": round(float(shares or 0.0), 2),
+            "model_prob": row["model_prob"],
+            "executable_ev": row["executable_ev"],
+            "score": row["score"],
+            "opened_at": row["opened_at"],
+            "resolution_source": candidate.get("resolution_source"),
+            "resolution_location": candidate.get("resolution_location"),
+        })
+    report = {"summary": {"trades": len(trades), "total_at_risk_usd": round(total_at_risk, 2)}, "trades": trades}
+    report_path = settings.project_root / "reports" / "paper_trades.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    print(f"Saved report: {report_path}")
+
+
 def cmd_run_once() -> None:
     cmd_init_db()
     cmd_fetch_markets()
@@ -149,6 +206,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("fetch-markets")
     sub.add_parser("scan")
     sub.add_parser("verify-candidates")
+    paper_open = sub.add_parser("paper-open")
+    paper_open.add_argument("--limit", type=int, default=5)
+    paper_open.add_argument("--size-usd", type=float, default=1.0)
+    paper_open.add_argument("--include-paper", action="store_true")
+    sub.add_parser("paper-report")
     sub.add_parser("run-once")
     return parser
 
@@ -164,6 +226,10 @@ def main() -> None:
         cmd_scan()
     elif args.command == "verify-candidates":
         cmd_verify_candidates()
+    elif args.command == "paper-open":
+        cmd_paper_open(limit=args.limit, size_usd=args.size_usd, include_paper=args.include_paper)
+    elif args.command == "paper-report":
+        cmd_paper_report()
     elif args.command == "run-once":
         cmd_run_once()
     else:

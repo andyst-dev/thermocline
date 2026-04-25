@@ -60,8 +60,31 @@ CREATE TABLE IF NOT EXISTS scans (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    market_id TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    question TEXT NOT NULL,
+    side TEXT NOT NULL,
+    entry_price REAL NOT NULL,
+    size_usd REAL NOT NULL,
+    model_prob REAL,
+    executable_ev REAL,
+    score REAL,
+    verdict TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    exit_price REAL,
+    pnl_usd REAL,
+    notes TEXT,
+    candidate_json TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    closed_at TEXT,
+    UNIQUE(market_id, side, opened_at)
+);
+
 CREATE INDEX IF NOT EXISTS idx_scans_market_created ON scans(market_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_forecasts_market_created ON forecasts(market_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades(status, opened_at DESC);
 """
 
 
@@ -158,6 +181,50 @@ def insert_forecast(
             datetime.now(dt_timezone.utc).isoformat(),
         ),
     )
+
+
+def insert_paper_trade(
+    conn: sqlite3.Connection,
+    *,
+    candidate: dict,
+    size_usd: float,
+    notes: str = "",
+) -> None:
+    now = datetime.now(dt_timezone.utc).isoformat()
+    entry_price = float(candidate["best_ask"])
+    shares = size_usd / entry_price if entry_price > 0 else 0.0
+    enriched = dict(candidate)
+    enriched["paper_shares"] = shares
+    conn.execute(
+        """
+        INSERT INTO paper_trades(
+            market_id, slug, question, side, entry_price, size_usd,
+            model_prob, executable_ev, score, verdict, status,
+            notes, candidate_json, opened_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+        """,
+        (
+            candidate["market_id"],
+            candidate["slug"],
+            candidate["question"],
+            candidate["side"],
+            entry_price,
+            size_usd,
+            candidate.get("model_prob"),
+            candidate.get("executable_ev"),
+            candidate.get("score"),
+            candidate.get("verdict"),
+            notes,
+            json.dumps(enriched),
+            now,
+        ),
+    )
+
+
+def list_paper_trades(conn: sqlite3.Connection, status: str | None = None) -> list[sqlite3.Row]:
+    if status:
+        return list(conn.execute("SELECT * FROM paper_trades WHERE status = ? ORDER BY opened_at DESC", (status,)))
+    return list(conn.execute("SELECT * FROM paper_trades ORDER BY opened_at DESC"))
 
 
 def insert_scan(conn: sqlite3.Connection, scan: ScanResult) -> None:

@@ -1,0 +1,83 @@
+{
+  "summary": {
+    "trades": 5,
+    "total_at_risk_usd": 5.0
+  },
+  "trades": [
+    {
+      "id": 5,
+      "status": "open",
+      "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
+      "side": "Yes",
+      "entry_price": 0.023,
+      "size_usd": 1.0,
+      "paper_shares": 43.48,
+      "model_prob": 0.9044,
+      "executable_ev": 0.8814,
+      "score": 121.9919,
+      "opened_at": "2026-04-25T12:13:37.386175+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/fr/bonneuil-en-france/LFPB",
+      "resolution_location": "LFPB"
+    },
+    {
+      "id": 4,
+      "status": "open",
+      "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
+      "side": "Yes",
+      "entry_price": 0.001,
+      "size_usd": 1.0,
+      "paper_shares": 1000.0,
+      "model_prob": 0.9044,
+      "executable_ev": 0.9034,
+      "score": 125.2919,
+      "opened_at": "2026-04-25T12:13:37.386137+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/gb/london/EGLC",
+      "resolution_location": "EGLC"
+    },
+    {
+      "id": 3,
+      "status": "open",
+      "question": "Will the lowest temperature in Seoul be 9\u00b0C on April 25?",
+      "side": "No",
+      "entry_price": 0.004,
+      "size_usd": 1.0,
+      "paper_shares": 250.0,
+      "model_prob": 0.9522,
+      "executable_ev": 0.9482,
+      "score": 129.621,
+      "opened_at": "2026-04-25T12:13:37.386063+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/kr/incheon/RKSI",
+      "resolution_location": "RKSI"
+    },
+    {
+      "id": 2,
+      "status": "open",
+      "question": "Will the highest temperature in Seoul be 20\u00b0C on April 25?",
+      "side": "No",
+      "entry_price": 0.001,
+      "size_usd": 1.0,
+      "paper_shares": 1000.0,
+      "model_prob": 0.9522,
+      "executable_ev": 0.9512,
+      "score": 130.071,
+      "opened_at": "2026-04-25T12:13:37.386006+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/kr/incheon/RKSI",
+      "resolution_location": "RKSI"
+    },
+    {
+      "id": 1,
+      "status": "open",
+      "question": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
+      "side": "Yes",
+      "entry_price": 0.004,
+      "size_usd": 1.0,
+      "paper_shares": 250.0,
+      "model_prob": 1.0,
+      "executable_ev": 0.996,
+      "score": 134.4,
+      "opened_at": "2026-04-25T12:13:37.385834+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/us/ny/new-york-city/KLGA",
+      "resolution_location": "KLGA"
+    }
+  ]
+}
