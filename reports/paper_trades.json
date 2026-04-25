@@ -1,9 +1,24 @@
 {
   "summary": {
-    "trades": 13,
-    "total_at_risk_usd": 13.0
+    "trades": 14,
+    "total_at_risk_usd": 14.0
   },
   "trades": [
+    {
+      "id": 14,
+      "status": "open",
+      "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
+      "side": "No",
+      "entry_price": 0.06,
+      "size_usd": 1.0,
+      "paper_shares": 16.67,
+      "model_prob": 0.9999,
+      "executable_ev": 0.9399,
+      "score": 125.9858,
+      "opened_at": "2026-04-25T18:05:36.450072+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/us/fl/miami/KMIA",
+      "resolution_location": "KMIA"
+    },
     {
       "id": 13,
       "status": "closed",

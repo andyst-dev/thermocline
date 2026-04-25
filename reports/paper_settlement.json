@@ -2,6 +2,13 @@
   "settled": [],
   "pending": [
     {
+      "id": 14,
+      "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
+      "side": "No",
+      "observed_value_c": 27.8,
+      "notes": "tentative only: 24 METAR obs, day not complete"
+    },
+    {
       "id": 12,
       "question": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
       "side": "No",
@@ -20,21 +27,21 @@
       "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 21.0,
-      "notes": "tentative only: 37 METAR obs, day not complete"
+      "notes": "tentative only: 38 METAR obs, day not complete"
     },
     {
       "id": 5,
       "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 23.0,
-      "notes": "tentative only: 40 METAR obs, day not complete"
+      "notes": "tentative only: 41 METAR obs, day not complete"
     },
     {
       "id": 4,
       "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 21.0,
-      "notes": "tentative only: 37 METAR obs, day not complete"
+      "notes": "tentative only: 38 METAR obs, day not complete"
     },
     {
       "id": 3,
@@ -53,7 +60,7 @@
   ],
   "summary": {
     "settled": 0,
-    "pending": 7,
+    "pending": 8,
     "pnl_usd": 0
   }
 }

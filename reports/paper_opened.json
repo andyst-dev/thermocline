@@ -1,4 +1,29 @@
 {
-  "opened": [],
+  "opened": [
+    {
+      "verdict": "PASS",
+      "reason": "meets executable EV, liquidity, confidence, station and observation checks",
+      "score": 125.9858,
+      "market_id": "2056978",
+      "slug": "highest-temperature-in-miami-on-april-25-2026-84-85f",
+      "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
+      "city": "Miami",
+      "target_date": "2026-04-25",
+      "side": "No",
+      "model_prob": 0.9999,
+      "gamma_price": 0.095,
+      "best_bid": 0.05,
+      "best_ask": 0.06,
+      "executable_ev": 0.9399,
+      "liquidity": 589.5858,
+      "confidence": "high",
+      "forecast_value_c": 27.8,
+      "sigma_c": 0.3,
+      "horizon_hours": 0.0,
+      "resolution_location": "KMIA",
+      "observed_metar_count": 24,
+      "resolution_source": "https://www.wunderground.com/history/daily/us/fl/miami/KMIA"
+    }
+  ],
   "size_usd": 1.0
 }

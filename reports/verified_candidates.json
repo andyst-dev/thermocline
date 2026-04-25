@@ -21,7 +21,7 @@
       "best_bid": null,
       "best_ask": 0.001,
       "executable_ev": 0.999,
-      "liquidity": 21003.74829,
+      "liquidity": 21883.37793,
       "confidence": "high",
       "forecast_value_c": 28.0,
       "sigma_c": 0.3,
@@ -45,7 +45,7 @@
       "best_bid": 0.001,
       "best_ask": 0.002,
       "executable_ev": 0.998,
-      "liquidity": 1869.91649,
+      "liquidity": 2184.3698,
       "confidence": "high",
       "forecast_value_c": 18.3,
       "sigma_c": 0.3,
@@ -57,7 +57,7 @@
     {
       "verdict": "PASS",
       "reason": "meets executable EV, liquidity, confidence, station and observation checks",
-      "score": 132.75,
+      "score": 133.35,
       "market_id": "2056945",
       "slug": "highest-temperature-in-nyc-on-april-25-2026-50-51f",
       "question": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
@@ -65,11 +65,11 @@
       "target_date": "2026-04-25",
       "side": "No",
       "model_prob": 1.0,
-      "gamma_price": 0.011,
-      "best_bid": 0.007,
-      "best_ask": 0.015,
-      "executable_ev": 0.985,
-      "liquidity": 1217.43272,
+      "gamma_price": 0.0075,
+      "best_bid": 0.003,
+      "best_ask": 0.011,
+      "executable_ev": 0.989,
+      "liquidity": 1231.73316,
       "confidence": "high",
       "forecast_value_c": 18.3,
       "sigma_c": 0.3,
@@ -81,7 +81,7 @@
     {
       "verdict": "PASS",
       "reason": "meets executable EV, liquidity, confidence, station and observation checks",
-      "score": 126.0,
+      "score": 133.2,
       "market_id": "2056993",
       "slug": "highest-temperature-in-chicago-on-april-25-2026-62forhigher",
       "question": "Will the highest temperature in Chicago be 62\u00b0F or higher on April 25?",
@@ -89,23 +89,47 @@
       "target_date": "2026-04-25",
       "side": "Yes",
       "model_prob": 1.0,
-      "gamma_price": 0.048,
-      "best_bid": 0.014,
-      "best_ask": 0.06,
-      "executable_ev": 0.94,
-      "liquidity": 825.62292,
+      "gamma_price": 0.0165,
+      "best_bid": 0.005,
+      "best_ask": 0.012,
+      "executable_ev": 0.988,
+      "liquidity": 867.18611,
       "confidence": "high",
       "forecast_value_c": 20.6,
       "sigma_c": 0.3,
       "horizon_hours": 0.0,
       "resolution_location": "KORD",
-      "observed_metar_count": 35,
+      "observed_metar_count": 36,
       "resolution_source": "https://www.wunderground.com/history/daily/us/il/chicago/KORD"
     },
     {
       "verdict": "PASS",
       "reason": "meets executable EV, liquidity, confidence, station and observation checks",
-      "score": 123.0,
+      "score": 125.9858,
+      "market_id": "2056978",
+      "slug": "highest-temperature-in-miami-on-april-25-2026-84-85f",
+      "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
+      "city": "Miami",
+      "target_date": "2026-04-25",
+      "side": "No",
+      "model_prob": 0.9999,
+      "gamma_price": 0.095,
+      "best_bid": 0.05,
+      "best_ask": 0.06,
+      "executable_ev": 0.9399,
+      "liquidity": 589.5858,
+      "confidence": "high",
+      "forecast_value_c": 27.8,
+      "sigma_c": 0.3,
+      "horizon_hours": 0.0,
+      "resolution_location": "KMIA",
+      "observed_metar_count": 24,
+      "resolution_source": "https://www.wunderground.com/history/daily/us/fl/miami/KMIA"
+    },
+    {
+      "verdict": "PASS",
+      "reason": "meets executable EV, liquidity, confidence, station and observation checks",
+      "score": 121.5,
       "market_id": "2057203",
       "slug": "highest-temperature-in-denver-on-april-25-2026-59forbelow",
       "question": "Will the highest temperature in Denver be 59\u00b0F or below on April 25?",
@@ -113,11 +137,11 @@
       "target_date": "2026-04-25",
       "side": "No",
       "model_prob": 1.0,
-      "gamma_price": 0.05,
-      "best_bid": 0.02,
-      "best_ask": 0.08,
-      "executable_ev": 0.92,
-      "liquidity": 643.98,
+      "gamma_price": 0.07,
+      "best_bid": 0.01,
+      "best_ask": 0.09,
+      "executable_ev": 0.91,
+      "liquidity": 529.3813,
       "confidence": "high",
       "forecast_value_c": 22.2,
       "sigma_c": 0.3,
@@ -137,13 +161,37 @@
       "target_date": "2026-04-25",
       "side": "No",
       "model_prob": 0.9593,
-      "gamma_price": 0.0155,
-      "best_bid": 0.001,
+      "gamma_price": 0.016,
+      "best_bid": 0.003,
       "best_ask": 0.03,
       "executable_ev": 0.9293,
-      "liquidity": 285.99916,
+      "liquidity": 324.71295,
       "confidence": "high",
       "forecast_value_c": 21.7,
+      "sigma_c": 0.3,
+      "horizon_hours": 0.0,
+      "resolution_location": "KMIA",
+      "observed_metar_count": 24,
+      "resolution_source": "https://www.wunderground.com/history/daily/us/fl/miami/KMIA"
+    },
+    {
+      "verdict": "PASS",
+      "reason": "meets executable EV, liquidity, confidence, station and observation checks",
+      "score": 84.0304,
+      "market_id": "2056977",
+      "slug": "highest-temperature-in-miami-on-april-25-2026-82-83f",
+      "question": "Will the highest temperature in Miami be between 82-83\u00b0F on April 25?",
+      "city": "Miami",
+      "target_date": "2026-04-25",
+      "side": "Yes",
+      "model_prob": 0.4918,
+      "gamma_price": 0.005,
+      "best_bid": null,
+      "best_ask": 0.001,
+      "executable_ev": 0.4908,
+      "liquidity": 65943.658,
+      "confidence": "high",
+      "forecast_value_c": 27.8,
       "sigma_c": 0.3,
       "horizon_hours": 0.0,
       "resolution_location": "KMIA",
@@ -161,11 +209,11 @@
       "target_date": "2026-04-25",
       "side": "Yes",
       "model_prob": 0.5,
-      "gamma_price": 0.0085,
-      "best_bid": 0.007,
+      "gamma_price": 0.007,
+      "best_bid": 0.004,
       "best_ask": 0.01,
       "executable_ev": 0.49,
-      "liquidity": 944.31283,
+      "liquidity": 984.56828,
       "confidence": "high",
       "forecast_value_c": 11.0,
       "sigma_c": 0.3,
@@ -189,7 +237,7 @@
       "best_bid": null,
       "best_ask": 0.001,
       "executable_ev": 0.479,
-      "liquidity": 3482.48181,
+      "liquidity": 3284.39189,
       "confidence": "high",
       "forecast_value_c": 28.9,
       "sigma_c": 0.3,
@@ -197,61 +245,13 @@
       "resolution_location": "KATL",
       "observed_metar_count": 24,
       "resolution_source": "https://www.wunderground.com/history/daily/us/ga/atlanta/KATL"
-    },
-    {
-      "verdict": "PASS",
-      "reason": "meets executable EV, liquidity, confidence, station and observation checks",
-      "score": 79.1919,
-      "market_id": "2057210",
-      "slug": "highest-temperature-in-denver-on-april-25-2026-72-73f",
-      "question": "Will the highest temperature in Denver be between 72-73\u00b0F on April 25?",
-      "city": "Denver",
-      "target_date": "2026-04-25",
-      "side": "Yes",
-      "model_prob": 0.4434,
-      "gamma_price": 0.0005,
-      "best_bid": null,
-      "best_ask": 0.001,
-      "executable_ev": 0.4424,
-      "liquidity": 1461.72697,
-      "confidence": "high",
-      "forecast_value_c": 22.2,
-      "sigma_c": 0.3,
-      "horizon_hours": 0.0,
-      "resolution_location": "KBKF",
-      "observed_metar_count": 25,
-      "resolution_source": "https://www.wunderground.com/history/daily/us/co/aurora/KBKF"
-    },
-    {
-      "verdict": "PASS",
-      "reason": "meets executable EV, liquidity, confidence, station and observation checks",
-      "score": 78.5919,
-      "market_id": "2057234",
-      "slug": "highest-temperature-in-los-angeles-on-april-25-2026-72-73f",
-      "question": "Will the highest temperature in Los Angeles be between 72-73\u00b0F on April 25?",
-      "city": "Los Angeles",
-      "target_date": "2026-04-25",
-      "side": "Yes",
-      "model_prob": 0.4434,
-      "gamma_price": 0.003,
-      "best_bid": 0.001,
-      "best_ask": 0.005,
-      "executable_ev": 0.4384,
-      "liquidity": 1821.06632,
-      "confidence": "high",
-      "forecast_value_c": 22.8,
-      "sigma_c": 0.3,
-      "horizon_hours": 0.0,
-      "resolution_location": "KLAX",
-      "observed_metar_count": 24,
-      "resolution_source": "https://www.wunderground.com/history/daily/us/ca/los-angeles/KLAX"
     }
   ],
   "counts": {
-    "pass": 11,
-    "paper": 24,
-    "reject": 188,
-    "skipped": 113
+    "pass": 14,
+    "paper": 25,
+    "reject": 173,
+    "skipped": 99
   },
   "skipped": [
     [
@@ -343,30 +343,6 @@
       "no hourly values for 2026-04-24"
     ],
     [
-      "lowest-temperature-in-tokyo-on-april-25-2026-8corbelow",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "lowest-temperature-in-tokyo-on-april-25-2026-9c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "lowest-temperature-in-tokyo-on-april-25-2026-10c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "lowest-temperature-in-tokyo-on-april-25-2026-11c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "lowest-temperature-in-tokyo-on-april-25-2026-12c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "lowest-temperature-in-tokyo-on-april-25-2026-13c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
       "lowest-temperature-in-hong-kong-on-april-25-2026-15corbelow",
       "no hourly values for 2026-04-25"
     ],
@@ -431,27 +407,51 @@
       "no hourly values for 2026-04-25"
     ],
     [
-      "highest-temperature-in-tokyo-on-april-25-2026-18c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "highest-temperature-in-tokyo-on-april-25-2026-19c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "highest-temperature-in-tokyo-on-april-25-2026-20c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "highest-temperature-in-tokyo-on-april-25-2026-21c",
-      "no hourly values for 2026-04-25"
-    ],
-    [
-      "highest-temperature-in-tokyo-on-april-25-2026-22corhigher",
-      "no hourly values for 2026-04-25"
-    ],
-    [
       "highest-temperature-in-hong-kong-on-april-25-2026-19corbelow",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-20c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-21c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-22c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-23c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-24c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-25c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-26c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-27c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-28c",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-25-2026-29corhigher",
+      "no hourly values for 2026-04-25"
+    ],
+    [
+      "highest-temperature-in-shanghai-on-april-25-2026-21c",
       "no hourly values for 2026-04-25"
     ]
   ]
