@@ -216,9 +216,11 @@ def cmd_paper_report() -> None:
     init_db(settings.db_path)
     with connect(settings.db_path) as conn:
         rows = list_paper_trades(conn)
+    active_rows = [row for row in rows if row["status"] != "duplicate"]
+    duplicate_rows = [row for row in rows if row["status"] == "duplicate"]
     trades = []
     total_at_risk = 0.0
-    for row in rows:
+    for row in active_rows:
         candidate = json.loads(row["candidate_json"])
         shares = candidate.get("paper_shares")
         total_at_risk += float(row["size_usd"])
@@ -237,7 +239,18 @@ def cmd_paper_report() -> None:
             "resolution_source": candidate.get("resolution_source"),
             "resolution_location": candidate.get("resolution_location"),
         })
-    report = {"summary": {"trades": len(trades), "total_at_risk_usd": round(total_at_risk, 2)}, "trades": trades}
+    closed_pnl = sum(float(row["pnl_usd"] or 0.0) for row in active_rows if row["status"] == "closed")
+    report = {
+        "summary": {
+            "trades": len(trades),
+            "closed": sum(1 for row in active_rows if row["status"] == "closed"),
+            "open": sum(1 for row in active_rows if row["status"] == "open"),
+            "duplicates_excluded": len(duplicate_rows),
+            "total_at_risk_usd": round(total_at_risk, 2),
+            "closed_pnl_usd": round(closed_pnl, 4),
+        },
+        "trades": trades,
+    }
     report_path = settings.project_root / "reports" / "paper_trades.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
