@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime
 from typing import Any
 
@@ -8,11 +10,15 @@ from ..fixtures import sample_weather_markets
 from ..http import get_json
 from ..models import WeatherMarket
 
-WEATHER_KEYWORDS = (
-    "highest temperature",
-    "temperature in",
-    "weather",
-    "temp in",
+# Keep this deliberately strict. Broad words like "weather" or "storm" create
+# bad matches (e.g. Carolina Hurricanes, geopolitical descriptions, etc.).
+SCANNABLE_CITY_TEMP_RE = re.compile(
+    r"highest temperature in\s+.+?\s+on\s+[A-Za-z]+\s+\d{1,2}",
+    flags=re.IGNORECASE,
+)
+GLOBAL_TEMP_RE = re.compile(
+    r"global temperature increase .* in [A-Za-z]+ \d{4}",
+    flags=re.IGNORECASE,
 )
 
 
@@ -32,62 +38,82 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _parse_json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            return []
+    return []
+
+
+def _is_weather_market(raw: dict[str, Any]) -> bool:
+    question = (raw.get("question") or raw.get("title") or "").strip()
+    return bool(SCANNABLE_CITY_TEMP_RE.search(question) or GLOBAL_TEMP_RE.search(question))
+
+
 def _normalize_market(raw: dict[str, Any]) -> WeatherMarket | None:
     question = (raw.get("question") or raw.get("title") or "").strip()
-    question_lc = question.lower()
-    if not any(keyword in question_lc for keyword in WEATHER_KEYWORDS):
+    if not question or not _is_weather_market(raw):
         return None
 
-    outcomes_raw = raw.get("outcomes") or []
-    prices_raw = raw.get("outcomePrices") or []
-
-    if isinstance(outcomes_raw, str):
-        import json
-        outcomes_raw = json.loads(outcomes_raw)
-    if isinstance(prices_raw, str):
-        import json
-        prices_raw = json.loads(prices_raw)
-
-    outcomes = [str(x).strip() for x in outcomes_raw]
-    outcome_prices = [_to_float(x) for x in prices_raw]
+    outcomes = [str(x).strip() for x in _parse_json_list(raw.get("outcomes"))]
+    outcome_prices = [_to_float(x) for x in _parse_json_list(raw.get("outcomePrices"))]
 
     if not outcomes or not outcome_prices or len(outcomes) != len(outcome_prices):
         return None
 
     market_id = str(raw.get("id") or raw.get("conditionId") or raw.get("slug") or question)
+    normalized_raw = dict(raw)
+    normalized_raw.setdefault("source", "polymarket_gamma")
     return WeatherMarket(
         market_id=market_id,
         slug=str(raw.get("slug") or market_id),
         question=question,
-        end_date=_parse_dt(raw.get("endDate") or raw.get("end_date_iso")),
+        end_date=_parse_dt(raw.get("endDate") or raw.get("end_date_iso") or raw.get("endDateIso")),
         active=bool(raw.get("active", False)),
         closed=bool(raw.get("closed", False)),
-        liquidity=_to_float(raw.get("liquidity")),
+        liquidity=_to_float(raw.get("liquidity") or raw.get("liquidityNum")),
         volume=_to_float(raw.get("volume") or raw.get("volumeNum")),
         outcomes=outcomes,
         outcome_prices=outcome_prices,
-        raw=raw,
+        raw=normalized_raw,
     )
 
 
+def _fetch_gamma_page(settings: Settings, offset: int) -> list[dict[str, Any]]:
+    payload = get_json(
+        f"{settings.polymarket_gamma_url}/markets",
+        params={
+            "limit": settings.market_limit,
+            "offset": offset,
+            "closed": "false",
+            "active": "true",
+        },
+    )
+    return payload if isinstance(payload, list) else []
+
+
 def fetch_weather_markets(settings: Settings) -> list[WeatherMarket]:
-    try:
-        payload = get_json(
-            f"{settings.polymarket_gamma_url}/markets",
-            params={
-                "limit": settings.market_limit,
-                "closed": "false",
-                "active": "true",
-            },
-        )
-    except Exception:
+    if settings.use_fixtures:
         return sample_weather_markets()
 
-    if not isinstance(payload, list):
+    markets_by_id: dict[str, WeatherMarket] = {}
+    try:
+        for page in range(settings.market_scan_pages):
+            offset = page * settings.market_limit
+            payload = _fetch_gamma_page(settings, offset)
+            if not payload:
+                break
+            for raw in payload:
+                market = _normalize_market(raw)
+                if market is not None:
+                    markets_by_id[market.market_id] = market
+    except Exception:
+        # Network/API failure: keep local development usable.
         return sample_weather_markets()
-    markets: list[WeatherMarket] = []
-    for raw in payload:
-        market = _normalize_market(raw)
-        if market is not None:
-            markets.append(market)
-    return markets or sample_weather_markets()
+
+    return list(markets_by_id.values())

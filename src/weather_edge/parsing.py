@@ -44,6 +44,30 @@ def parse_city_and_date(question: str) -> tuple[str, datetime] | None:
     return city, target
 
 
+def parse_global_temperature_market(question: str) -> tuple[int, int, float | None, float | None] | None:
+    match = re.search(
+        r"global temperature increase by (?P<range>.+?) in (?P<month>[A-Za-z]+) (?P<year>\d{4})",
+        question,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    month = MONTHS.get(match.group("month").lower())
+    year = int(match.group("year"))
+    if month is None:
+        return None
+    text = match.group("range").replace("º", "").replace("°", "")
+    numbers = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", text)]
+    text_lc = text.lower()
+    if "less than" in text_lc and numbers:
+        return year, month, None, numbers[0]
+    if "more than" in text_lc and numbers:
+        return year, month, numbers[0], None
+    if "between" in text_lc and len(numbers) >= 2:
+        return year, month, numbers[0], numbers[1]
+    return None
+
+
 def parse_bucket(label: str) -> tuple[float | None, float | None]:
     normalized = label.strip().replace("°", "").replace("F", "").replace("C", "").replace("–", "-")
     normalized = normalized.replace("to", "-")

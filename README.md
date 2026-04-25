@@ -3,10 +3,10 @@
 Scanner V1 pour repérer des inefficiences sur les weather markets, en mode sérieux et local-first.
 
 ## V1
-- récupération des marchés météo Polymarket (Gamma public API)
-- parsing des buckets de température
+- récupération des marchés météo Polymarket (Gamma public API, pagination offset)
+- parsing des buckets de température ville ou anomalie globale
 - géocodage de la ville cible
-- récupération des prévisions Open-Meteo
+- récupération des prévisions Open-Meteo ou baseline NASA GISTEMP globale
 - projection d'une distribution simple sur les buckets
 - calcul d'edge / EV / ranking
 - stockage SQLite local
@@ -36,8 +36,8 @@ PYTHONPATH=src python -m weather_edge.main run-once
 ```
 
 ## Limites actuelles
-- parsing de marché encore heuristique
-- modèle probabiliste baseline seulement
+- discovery Polymarket encore basée sur patterns de questions stricts
+- modèle probabiliste baseline seulement, surtout pour GISTEMP global
 - pas encore de snapshots CLOB détaillés ni de backtest complet
 - matching ville/date à améliorer sur les formats exotiques
 

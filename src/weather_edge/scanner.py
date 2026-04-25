@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
 from .config import Settings
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
-from .parsing import bucket_probability, parse_bucket, parse_city_and_date
+from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market
 
 
 class ScanSkip(Exception):
@@ -54,7 +55,7 @@ def _sigma_for_horizon(target_date: datetime) -> tuple[float, float]:
     return sigma_c, horizon_hours
 
 
-def scan_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
+def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
     context = _extract_context(settings, market)
     forecast = fetch_hourly_forecast(settings, context.latitude, context.longitude, context.timezone)
     forecast_max_c = _forecast_daily_max(forecast, context.target_date)
@@ -110,6 +111,65 @@ def scan_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, 
         },
         "forecast": forecast,
     }
+
+
+def _scan_global_temperature_market(market: WeatherMarket) -> tuple[ScanResult, dict]:
+    parsed = parse_global_temperature_market(market.question)
+    if not parsed:
+        raise ScanSkip("question pattern unsupported")
+    year, month, lower, upper = parsed
+    baseline = global_temp_baseline(month)
+    bracket_prob = bucket_probability(lower, upper, baseline.mean_c, baseline.sigma_c)
+
+    buckets: list[BucketProbability] = []
+    for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
+        model_prob = bracket_prob if label.lower() == "yes" else 1.0 - bracket_prob
+        buckets.append(
+            BucketProbability(
+                label=label,
+                lower=lower if label.lower() == "yes" else None,
+                upper=upper if label.lower() == "yes" else None,
+                market_prob=market_prob,
+                model_prob=model_prob,
+                edge=model_prob - market_prob,
+                ev=model_prob - market_prob,
+            )
+        )
+
+    buckets.sort(key=lambda x: x.ev, reverse=True)
+    top = buckets[0] if buckets else None
+    result = ScanResult(
+        market_id=market.market_id,
+        slug=market.slug,
+        question=market.question,
+        city="Global",
+        target_date=f"{year}-{month:02d}",
+        forecast_max_c=baseline.mean_c,
+        sigma_c=baseline.sigma_c,
+        horizon_hours=0.0,
+        liquidity=market.liquidity,
+        buckets=buckets,
+        top_bucket_label=top.label if top else None,
+        top_bucket_ev=top.ev if top else None,
+        confidence="low",
+    )
+    return result, {
+        "context": {"city": "Global", "latitude": 0.0, "longitude": 0.0, "timezone": "UTC"},
+        "forecast": {
+            "kind": "nasa_gistemp_baseline",
+            "target_month": month,
+            "mean_c": baseline.mean_c,
+            "sigma_c": baseline.sigma_c,
+            "samples": baseline.samples,
+            "source_url": baseline.source_url,
+        },
+    }
+
+
+def scan_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
+    if parse_city_and_date(market.question):
+        return _scan_city_temperature_market(settings, market)
+    return _scan_global_temperature_market(market)
 
 
 def filter_markets(markets: list[WeatherMarket], min_liquidity: float) -> list[WeatherMarket]:

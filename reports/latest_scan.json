@@ -1,37 +1,70 @@
 {
   "results": [
     {
-      "market": "Highest temperature in Buenos Aires on April 27, 2026?",
-      "city": "Buenos Aires",
-      "date": "2026-04-27",
-      "forecast_max_c": 16.4,
-      "sigma_c": 2.76,
-      "top_bucket": "<18",
-      "top_bucket_ev": 0.6689,
+      "market": "Will global temperature increase by less than 1.10\u00baC in April 2026?",
+      "city": "Global",
+      "date": "2026-04",
+      "forecast_max_c": 1.02,
+      "sigma_c": 0.17,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.6848,
       "confidence": "low",
-      "liquidity": 500.0
+      "liquidity": 2095.64012
     },
     {
-      "market": "Highest temperature in Tokyo on April 29, 2026?",
-      "city": "Tokyo",
-      "date": "2026-04-29",
-      "forecast_max_c": 18.8,
-      "sigma_c": 4.43,
-      "top_bucket": "<16",
-      "top_bucket_ev": 0.2236,
+      "market": "Will global temperature increase by between 1.15\u00baC and 1.19\u00baC in April 2026?",
+      "city": "Global",
+      "date": "2026-04",
+      "forecast_max_c": 1.02,
+      "sigma_c": 0.17,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.5679,
       "confidence": "low",
-      "liquidity": 500.0
+      "liquidity": 1575.7879
     },
     {
-      "market": "Highest temperature in Chicago on April 28, 2026?",
-      "city": "Chicago",
-      "date": "2026-04-28",
-      "forecast_max_c": 17.0,
-      "sigma_c": 3.59,
-      "top_bucket": "22+",
-      "top_bucket_ev": 0.0121,
+      "market": "Will global temperature increase by between 1.20\u00baC and 1.24\u00baC in April 2026?",
+      "city": "Global",
+      "date": "2026-04",
+      "forecast_max_c": 1.02,
+      "sigma_c": 0.17,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.1,
       "confidence": "low",
-      "liquidity": 500.0
+      "liquidity": 2160.6325
+    },
+    {
+      "market": "Will global temperature increase by between 1.10\u00baC and 1.14\u00baC in April 2026?",
+      "city": "Global",
+      "date": "2026-04",
+      "forecast_max_c": 1.02,
+      "sigma_c": 0.17,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.0866,
+      "confidence": "low",
+      "liquidity": 1892.53
+    },
+    {
+      "market": "Will global temperature increase by more than 1.29\u00baC in April 2026?",
+      "city": "Global",
+      "date": "2026-04",
+      "forecast_max_c": 1.02,
+      "sigma_c": 0.17,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.0401,
+      "confidence": "low",
+      "liquidity": 8240.1379
+    },
+    {
+      "market": "Will global temperature increase by between 1.25\u00baC and 1.29\u00baC in April 2026?",
+      "city": "Global",
+      "date": "2026-04",
+      "forecast_max_c": 1.02,
+      "sigma_c": 0.17,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.0182,
+      "confidence": "low",
+      "liquidity": 7338.19591
     }
   ],
   "skipped": []
