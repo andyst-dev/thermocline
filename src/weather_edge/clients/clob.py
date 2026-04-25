@@ -28,9 +28,16 @@ def _price(level: dict[str, Any]) -> float | None:
         return None
 
 
+def _has_min_size(level: dict[str, Any], min_size: float = 10.0) -> bool:
+    try:
+        return float(level.get("size", 0.0)) >= min_size
+    except (TypeError, ValueError):
+        return False
+
+
 def best_bid_ask(settings: Settings, token_id: str) -> tuple[float | None, float | None]:
     book = fetch_book(settings, token_id)
-    bids = [_price(level) for level in book.get("bids", []) if _price(level) is not None]
-    asks = [_price(level) for level in book.get("asks", []) if _price(level) is not None]
+    bids = [_price(level) for level in book.get("bids", []) if _has_min_size(level) and _price(level) is not None]
+    asks = [_price(level) for level in book.get("asks", []) if _has_min_size(level) and _price(level) is not None]
     # Buy liquidity is the cheapest ask; sell liquidity is the highest bid.
     return (max(bids) if bids else None, min(asks) if asks else None)

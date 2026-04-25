@@ -112,8 +112,9 @@ def fetch_weather_markets(settings: Settings) -> list[WeatherMarket]:
                 market = _normalize_market(raw)
                 if market is not None:
                     markets_by_id[market.market_id] = market
-    except Exception:
-        # Network/API failure: keep local development usable.
+    except Exception as exc:
+        # Network/API failure: keep local development usable, but make it visible.
+        print(f"WARNING: Polymarket API failure ({exc}); using fixtures", flush=True)
         return sample_weather_markets()
 
     return list(markets_by_id.values())

@@ -148,11 +148,11 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
     selected = [c.as_dict() for c in candidates if c.verdict in allowed and c.best_ask is not None and c.side][:limit]
     opened = []
     with connect(settings.db_path) as conn:
-        # Do not reopen the same market/side after settlement; otherwise repeated
-        # cycles inflate paper PnL by re-buying already-known outcomes.
-        existing = {(row["market_id"], row["side"]) for row in list_paper_trades(conn)}
+        # Do not open multiple sides/buckets for the same market in paper. They are
+        # correlated/contradictory and can inflate apparent edge.
+        existing = {row["market_id"] for row in list_paper_trades(conn)}
         for candidate in selected:
-            key = (candidate["market_id"], candidate["side"])
+            key = candidate["market_id"]
             if key in existing:
                 continue
             insert_paper_trade(conn, candidate=candidate, size_usd=size_usd, notes="auto paper-open from verified candidates")

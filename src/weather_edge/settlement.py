@@ -40,7 +40,9 @@ def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> Set
         timezone_name = "Europe/London"
     elif icao.startswith("LF"):
         timezone_name = "Europe/Paris"
-    elif icao.startswith("KL") or icao.startswith("KJ") or icao.startswith("KM"):
+    elif icao == "KORD":
+        timezone_name = "America/Chicago"
+    elif icao.startswith("K"):
         timezone_name = "America/New_York"
     elif icao.startswith("CY"):
         timezone_name = "America/Toronto"
@@ -60,7 +62,7 @@ def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> Set
     yes_wins = False
     irreversible = day_complete
     if contract.lower_c is None and contract.upper_c is not None:
-        yes_wins = observed <= contract.upper_c if contract.metric == "lowest" else observed <= contract.upper_c
+        yes_wins = observed <= contract.upper_c
         if observed > contract.upper_c:
             irreversible = True
     elif contract.lower_c is not None and contract.upper_c is None:
