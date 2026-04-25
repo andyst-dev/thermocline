@@ -1,9 +1,54 @@
 {
   "summary": {
-    "trades": 10,
-    "total_at_risk_usd": 10.0
+    "trades": 13,
+    "total_at_risk_usd": 13.0
   },
   "trades": [
+    {
+      "id": 13,
+      "status": "closed",
+      "question": "Will the highest temperature in Denver be 59\u00b0F or below on April 25?",
+      "side": "No",
+      "entry_price": 0.07,
+      "size_usd": 1.0,
+      "paper_shares": 14.29,
+      "model_prob": 1.0,
+      "executable_ev": 0.93,
+      "score": 124.5,
+      "opened_at": "2026-04-25T17:07:46.673394+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/us/co/aurora/KBKF",
+      "resolution_location": "KBKF"
+    },
+    {
+      "id": 12,
+      "status": "open",
+      "question": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
+      "side": "No",
+      "entry_price": 0.016,
+      "size_usd": 1.0,
+      "paper_shares": 62.5,
+      "model_prob": 1.0,
+      "executable_ev": 0.984,
+      "score": 132.6,
+      "opened_at": "2026-04-25T17:07:46.673370+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/us/ny/new-york-city/KLGA",
+      "resolution_location": "KLGA"
+    },
+    {
+      "id": 11,
+      "status": "open",
+      "question": "Will the highest temperature in Chongqing be 31\u00b0C on April 25?",
+      "side": "No",
+      "entry_price": 0.001,
+      "size_usd": 1.0,
+      "paper_shares": 1000.0,
+      "model_prob": 1.0,
+      "executable_ev": 0.999,
+      "score": 134.85,
+      "opened_at": "2026-04-25T17:07:46.673283+00:00",
+      "resolution_source": "https://www.wunderground.com/history/daily/cn/chongqing/ZUCK",
+      "resolution_location": "ZUCK"
+    },
     {
       "id": 10,
       "status": "closed",

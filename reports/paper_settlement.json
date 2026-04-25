@@ -1,70 +1,72 @@
 {
   "settled": [
     {
-      "id": 10,
-      "question": "Will the highest temperature in Chicago be 62\u00b0F or higher on April 25?",
-      "side": "Yes",
-      "entry_price": 0.051,
+      "id": 13,
+      "question": "Will the highest temperature in Denver be 59\u00b0F or below on April 25?",
+      "side": "No",
+      "entry_price": 0.07,
       "exit_price": 1.0,
       "size_usd": 1.0,
-      "paper_shares": 19.61,
-      "pnl_usd": 18.6078,
-      "observed_value_c": 19.4,
-      "notes": "settled from 24 METAR obs at KORD"
-    },
-    {
-      "id": 9,
-      "question": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
-      "side": "Yes",
-      "entry_price": 0.003,
-      "exit_price": 1.0,
-      "size_usd": 1.0,
-      "paper_shares": 333.33,
-      "pnl_usd": 332.3333,
-      "observed_value_c": 18.3,
-      "notes": "settled from 27 METAR obs at KLGA"
+      "paper_shares": 14.29,
+      "pnl_usd": 13.2857,
+      "observed_value_c": 22.2,
+      "notes": "settled from 25 METAR obs at KBKF"
     }
   ],
   "pending": [
     {
+      "id": 12,
+      "question": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
+      "side": "No",
+      "observed_value_c": 18.3,
+      "notes": "tentative only: 27 METAR obs, day not complete"
+    },
+    {
+      "id": 11,
+      "question": "Will the highest temperature in Chongqing be 31\u00b0C on April 25?",
+      "side": "No",
+      "observed_value_c": 31.0,
+      "notes": "tentative only: 18 METAR obs, day not complete"
+    },
+    {
       "id": 7,
       "question": "Will the highest temperature in London be 18\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 18.0,
-      "notes": "tentative only: 28 METAR obs, day not complete"
+      "observed_value_c": 21.0,
+      "notes": "tentative only: 36 METAR obs, day not complete"
     },
     {
       "id": 5,
       "question": "Will the highest temperature in Paris be 21\u00b0C on April 25?",
       "side": "Yes",
       "observed_value_c": 23.0,
-      "notes": "tentative only: 31 METAR obs, day not complete"
+      "notes": "tentative only: 39 METAR obs, day not complete"
     },
     {
       "id": 4,
       "question": "Will the highest temperature in London be 16\u00b0C on April 25?",
       "side": "Yes",
-      "observed_value_c": 18.0,
-      "notes": "tentative only: 28 METAR obs, day not complete"
+      "observed_value_c": 21.0,
+      "notes": "tentative only: 36 METAR obs, day not complete"
     },
     {
       "id": 3,
       "question": "Will the lowest temperature in Seoul be 9\u00b0C on April 25?",
       "side": "No",
       "observed_value_c": 8.0,
-      "notes": "tentative only: 44 METAR obs, day not complete"
+      "notes": "tentative only: 48 METAR obs, day not complete"
     },
     {
       "id": 2,
       "question": "Will the highest temperature in Seoul be 20\u00b0C on April 25?",
       "side": "No",
       "observed_value_c": 21.0,
-      "notes": "tentative only: 44 METAR obs, day not complete"
+      "notes": "tentative only: 48 METAR obs, day not complete"
     }
   ],
   "summary": {
-    "settled": 2,
-    "pending": 5,
-    "pnl_usd": 350.9411
+    "settled": 1,
+    "pending": 7,
+    "pnl_usd": 13.2857
   }
 }
