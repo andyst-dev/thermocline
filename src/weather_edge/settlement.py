@@ -83,27 +83,18 @@ def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> Set
             hint = f"; METAR reference {metar_observed}°C from {metar_count} obs at {icao}" if metar_observed is not None else ""
             return SettlementResult(False, None, metar_observed, f"official source unavailable: {official_note}{hint}", "official_unavailable", metar_count)
 
-        yes_wins, irreversible = _evaluate_contract(contract, official_observed, day_complete)
-        if not irreversible:
-            return SettlementResult(
-                False,
-                None,
-                official_observed,
-                f"official tentative only: {official_count} weather.com/Wunderground obs, day not complete",
-                "official_wunderground",
-                official_count,
-            )
+        _yes_wins, irreversible = _evaluate_contract(contract, official_observed, day_complete)
         metar_observed, metar_count = observed_extreme_c(icao, contract.target_date, timezone_name, contract.metric)
         compare = ""
         if metar_observed is not None and abs(metar_observed - official_observed) > 0.6:
             compare = f"; METAR differs ({metar_observed}°C from {metar_count} obs)"
-        side_wins = yes_wins if side.lower() == "yes" else not yes_wins
+        state = "irreversible by source observation" if irreversible else "tentative/day not complete"
         return SettlementResult(
-            True,
-            1.0 if side_wins else 0.0,
+            False,
+            None,
             official_observed,
-            f"settled from official Wunderground/weather.com source: {official_count} obs at {icao}{compare}",
-            "official_wunderground",
+            f"provisional Wunderground/weather.com observation only ({state}): {official_count} obs at {icao}{compare}; wait for Polymarket Gamma closed outcome before counting PnL",
+            "official_wunderground_provisional",
             official_count,
         )
 
@@ -111,9 +102,13 @@ def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> Set
     if observed is None:
         return SettlementResult(False, None, None, f"no METAR observations for {icao}", "metar", 0)
 
-    yes_wins, irreversible = _evaluate_contract(contract, observed, day_complete)
-    if not irreversible:
-        return SettlementResult(False, None, observed, f"tentative only: {count} METAR obs, day not complete", "metar_provisional", count)
-
-    side_wins = yes_wins if side.lower() == "yes" else not yes_wins
-    return SettlementResult(True, 1.0 if side_wins else 0.0, observed, f"settled from METAR fallback: {count} obs at {icao}", "metar_fallback", count)
+    _yes_wins, irreversible = _evaluate_contract(contract, observed, day_complete)
+    state = "irreversible by METAR observation" if irreversible else "tentative/day not complete"
+    return SettlementResult(
+        False,
+        None,
+        observed,
+        f"provisional METAR fallback only ({state}): {count} obs at {icao}; wait for Polymarket Gamma closed outcome before counting PnL",
+        "metar_provisional",
+        count,
+    )
