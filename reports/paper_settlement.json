@@ -2,6 +2,51 @@
   "settled": [],
   "pending": [
     {
+      "id": 19,
+      "question": "Will the highest temperature in Taipei be 23\u00b0C or below on April 26?",
+      "side": "Yes",
+      "observed_value_c": null,
+      "authority": "official_unavailable",
+      "observation_count": 0,
+      "notes": "official source unavailable: weather.com historical fetch failed for RCSS: HTTP Error 400: Bad Request"
+    },
+    {
+      "id": 18,
+      "question": "Will the highest temperature in Guangzhou be 26\u00b0C or below on April 26?",
+      "side": "Yes",
+      "observed_value_c": null,
+      "authority": "official_unavailable",
+      "observation_count": 0,
+      "notes": "official source unavailable: weather.com historical fetch failed for ZGGG: HTTP Error 400: Bad Request"
+    },
+    {
+      "id": 17,
+      "question": "Will the highest temperature in Wuhan be 25\u00b0C or below on April 26?",
+      "side": "Yes",
+      "observed_value_c": null,
+      "authority": "official_unavailable",
+      "observation_count": 0,
+      "notes": "official source unavailable: weather.com historical fetch failed for ZHHH: HTTP Error 400: Bad Request"
+    },
+    {
+      "id": 16,
+      "question": "Will the highest temperature in Busan be 17\u00b0C or below on April 26?",
+      "side": "Yes",
+      "observed_value_c": 14.0,
+      "authority": "official_unavailable",
+      "observation_count": 9,
+      "notes": "official source unavailable: weather.com historical fetch failed for RKPK: HTTP Error 400: Bad Request; METAR reference 14.0\u00b0C from 9 obs at RKPK"
+    },
+    {
+      "id": 15,
+      "question": "Will the highest temperature in Shanghai be 18\u00b0C or below on April 26?",
+      "side": "Yes",
+      "observed_value_c": null,
+      "authority": "official_unavailable",
+      "observation_count": 0,
+      "notes": "official source unavailable: weather.com historical fetch failed for ZSPD: HTTP Error 400: Bad Request"
+    },
+    {
       "id": 14,
       "question": "Will the highest temperature in Miami be between 84-85\u00b0F on April 25?",
       "side": "No",
@@ -49,7 +94,7 @@
   ],
   "summary": {
     "settled": 0,
-    "pending": 5,
+    "pending": 10,
     "pnl_usd": 0
   }
 }
