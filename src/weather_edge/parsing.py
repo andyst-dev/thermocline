@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
+
+@dataclass(frozen=True)
+class TemperatureContract:
+    metric: str
+    city: str
+    target_date: datetime
+    lower_c: float | None
+    upper_c: float | None
+    label: str
+
 
 MONTHS = {
     name.lower(): idx
@@ -42,6 +53,60 @@ def parse_city_and_date(question: str) -> tuple[str, datetime] | None:
         return None
     target = datetime(year, month, day, tzinfo=timezone.utc)
     return city, target
+
+
+def _to_celsius(value: float, unit: str) -> float:
+    if unit.upper() == "F":
+        return (value - 32.0) * 5.0 / 9.0
+    return value
+
+
+def parse_temperature_contract(question: str) -> TemperatureContract | None:
+    match = re.search(
+        r"(?:Will\s+the\s+)?(?P<metric>highest|lowest) temperature in\s+"
+        r"(?P<city>.+?)\s+be\s+(?P<bucket>.+?)\s+on\s+"
+        r"(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})(?:,?\s*(?P<year>\d{4}))?",
+        question,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    month = MONTHS.get(match.group("month").lower())
+    if month is None:
+        return None
+    year = int(match.group("year") or datetime.now(timezone.utc).year)
+    bucket = match.group("bucket").strip(" ?")
+    unit_match = re.search(r"°?([CF])", bucket, flags=re.IGNORECASE)
+    unit = unit_match.group(1).upper() if unit_match else "C"
+    numbers = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", bucket)]
+    if not numbers:
+        return None
+
+    bucket_lc = bucket.lower()
+    lower: float | None
+    upper: float | None
+    if "below" in bucket_lc or "or less" in bucket_lc or "or lower" in bucket_lc:
+        lower, upper = None, _to_celsius(numbers[0], unit)
+    elif "higher" in bucket_lc or "or more" in bucket_lc or "or above" in bucket_lc:
+        lower, upper = _to_celsius(numbers[0], unit), None
+    elif "between" in bucket_lc and len(numbers) >= 2:
+        lower, upper = _to_celsius(numbers[0], unit), _to_celsius(numbers[1], unit)
+    elif len(numbers) == 1:
+        value = _to_celsius(numbers[0], unit)
+        # Single-degree Celsius buckets resolve to exact integer °C; Fahrenheit
+        # markets usually use 2°F buckets, handled by "between" above.
+        lower, upper = value - 0.5, value + 0.5
+    else:
+        lower, upper = _to_celsius(numbers[0], unit), _to_celsius(numbers[-1], unit)
+
+    return TemperatureContract(
+        metric=match.group("metric").lower(),
+        city=match.group("city").strip(" ?"),
+        target_date=datetime(year, month, int(match.group("day")), tzinfo=timezone.utc),
+        lower_c=lower,
+        upper_c=upper,
+        label=bucket,
+    )
 
 
 def parse_global_temperature_market(question: str) -> tuple[int, int, float | None, float | None] | None:

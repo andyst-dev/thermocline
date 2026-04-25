@@ -1,6 +1,110 @@
 {
   "results": [
     {
+      "market": "Will the highest temperature in New York City be 58\u00b0F or higher on April 25?",
+      "city": "New York City",
+      "date": "2026-04-25",
+      "forecast_max_c": 18.3,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.9975,
+      "top_executable_ev": 0.996,
+      "top_best_ask": 0.004,
+      "confidence": "high",
+      "liquidity": 3239.50811
+    },
+    {
+      "market": "Will the highest temperature in Seoul be 20\u00b0C on April 25?",
+      "city": "Seoul",
+      "date": "2026-04-25",
+      "forecast_max_c": 21.0,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.9517,
+      "top_executable_ev": 0.9512,
+      "top_best_ask": 0.001,
+      "confidence": "high",
+      "liquidity": 20790.56136
+    },
+    {
+      "market": "Will the lowest temperature in Seoul be 9\u00b0C on April 25?",
+      "city": "Seoul",
+      "date": "2026-04-25",
+      "forecast_max_c": 8.0,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.9492,
+      "top_executable_ev": 0.9482,
+      "top_best_ask": 0.004,
+      "confidence": "high",
+      "liquidity": 808.79419
+    },
+    {
+      "market": "Will the highest temperature in London be 16\u00b0C on April 25?",
+      "city": "London",
+      "date": "2026-04-25",
+      "forecast_max_c": 16.0,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.9039,
+      "top_executable_ev": 0.9034,
+      "top_best_ask": 0.001,
+      "confidence": "high",
+      "liquidity": 8765.95954
+    },
+    {
+      "market": "Will the highest temperature in Paris be 20\u00b0C on April 25?",
+      "city": "Paris",
+      "date": "2026-04-25",
+      "forecast_max_c": 20.0,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.9029,
+      "top_executable_ev": 0.9034,
+      "top_best_ask": 0.001,
+      "confidence": "high",
+      "liquidity": 2940.02131
+    },
+    {
+      "market": "Will the lowest temperature in Miami be between 72-73\u00b0F on April 25?",
+      "city": "Miami",
+      "date": "2026-04-25",
+      "forecast_max_c": 21.7,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.9213,
+      "top_executable_ev": 0.9033,
+      "top_best_ask": 0.056,
+      "confidence": "high",
+      "liquidity": 240.17056
+    },
+    {
+      "market": "Will the lowest temperature in Hong Kong be 20\u00b0C on April 25?",
+      "city": "Hong Kong",
+      "date": "2026-04-25",
+      "forecast_max_c": 18.0,
+      "sigma_c": 1.5,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.8831,
+      "top_executable_ev": 0.8791,
+      "top_best_ask": 0.01,
+      "confidence": "high",
+      "liquidity": 3356.59035
+    },
+    {
+      "market": "Will the highest temperature in New York City be between 50-51\u00b0F on April 25?",
+      "city": "New York City",
+      "date": "2026-04-25",
+      "forecast_max_c": 18.3,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.875,
+      "top_executable_ev": 0.85,
+      "top_best_ask": 0.15,
+      "confidence": "high",
+      "liquidity": 1088.6582
+    },
+    {
       "market": "Will global temperature increase by less than 1.10\u00baC in April 2026?",
       "city": "Global",
       "date": "2026-04",
@@ -8,8 +112,23 @@
       "sigma_c": 0.17,
       "top_bucket": "Yes",
       "top_bucket_ev": 0.6848,
+      "top_executable_ev": 0.6798,
+      "top_best_ask": 0.015,
       "confidence": "low",
-      "liquidity": 2095.64012
+      "liquidity": 2031.16012
+    },
+    {
+      "market": "Will the highest temperature in Sao Paulo be 29\u00b0C on April 25?",
+      "city": "Sao Paulo",
+      "date": "2026-04-25",
+      "forecast_max_c": 29.0,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.5644,
+      "top_executable_ev": 0.5544,
+      "top_best_ask": 0.35,
+      "confidence": "high",
+      "liquidity": 248.4058
     },
     {
       "market": "Will global temperature increase by between 1.15\u00baC and 1.19\u00baC in April 2026?",
@@ -19,53 +138,217 @@
       "sigma_c": 0.17,
       "top_bucket": "No",
       "top_bucket_ev": 0.5679,
+      "top_executable_ev": 0.5279,
+      "top_best_ask": 0.41,
       "confidence": "low",
-      "liquidity": 1575.7879
+      "liquidity": 1629.5091
     },
     {
-      "market": "Will global temperature increase by between 1.20\u00baC and 1.24\u00baC in April 2026?",
-      "city": "Global",
-      "date": "2026-04",
-      "forecast_max_c": 1.02,
-      "sigma_c": 0.17,
-      "top_bucket": "No",
-      "top_bucket_ev": 0.1,
-      "confidence": "low",
-      "liquidity": 2160.6325
-    },
-    {
-      "market": "Will global temperature increase by between 1.10\u00baC and 1.14\u00baC in April 2026?",
-      "city": "Global",
-      "date": "2026-04",
-      "forecast_max_c": 1.02,
-      "sigma_c": 0.17,
-      "top_bucket": "No",
-      "top_bucket_ev": 0.0866,
-      "confidence": "low",
-      "liquidity": 1892.53
-    },
-    {
-      "market": "Will global temperature increase by more than 1.29\u00baC in April 2026?",
-      "city": "Global",
-      "date": "2026-04",
-      "forecast_max_c": 1.02,
-      "sigma_c": 0.17,
+      "market": "Will the highest temperature in Buenos Aires be 24\u00b0C on April 25?",
+      "city": "Buenos Aires",
+      "date": "2026-04-25",
+      "forecast_max_c": 24.0,
+      "sigma_c": 0.3,
       "top_bucket": "Yes",
-      "top_bucket_ev": 0.0401,
-      "confidence": "low",
-      "liquidity": 8240.1379
+      "top_bucket_ev": 0.5194,
+      "top_executable_ev": 0.5044,
+      "top_best_ask": 0.4,
+      "confidence": "high",
+      "liquidity": 314.3479
     },
     {
-      "market": "Will global temperature increase by between 1.25\u00baC and 1.29\u00baC in April 2026?",
-      "city": "Global",
-      "date": "2026-04",
-      "forecast_max_c": 1.02,
-      "sigma_c": 0.17,
+      "market": "Will the lowest temperature in Seoul be 8\u00b0C or below on April 25?",
+      "city": "Seoul",
+      "date": "2026-04-25",
+      "forecast_max_c": 8.0,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.4965,
+      "top_executable_ev": 0.495,
+      "top_best_ask": 0.005,
+      "confidence": "high",
+      "liquidity": 931.94363
+    },
+    {
+      "market": "Will the highest temperature in Toronto be 11\u00b0C or higher on April 25?",
+      "city": "Toronto",
+      "date": "2026-04-25",
+      "forecast_max_c": 11.0,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.4945,
+      "top_executable_ev": 0.494,
+      "top_best_ask": 0.006,
+      "confidence": "high",
+      "liquidity": 400.95846
+    },
+    {
+      "market": "Will the highest temperature in Seoul be 21\u00b0C or higher on April 25?",
+      "city": "Seoul",
+      "date": "2026-04-25",
+      "forecast_max_c": 21.0,
+      "sigma_c": 0.3,
+      "top_bucket": "Yes",
+      "top_bucket_ev": 0.496,
+      "top_executable_ev": 0.492,
+      "top_best_ask": 0.008,
+      "confidence": "high",
+      "liquidity": 2612.09626
+    },
+    {
+      "market": "Will the highest temperature in Paris be 23\u00b0C on April 25?",
+      "city": "Paris",
+      "date": "2026-04-25",
+      "forecast_max_c": 20.0,
+      "sigma_c": 0.3,
       "top_bucket": "No",
-      "top_bucket_ev": 0.0182,
-      "confidence": "low",
-      "liquidity": 7338.19591
+      "top_bucket_ev": 0.56,
+      "top_executable_ev": 0.49,
+      "top_best_ask": 0.51,
+      "confidence": "high",
+      "liquidity": 327.9522
+    },
+    {
+      "market": "Will the highest temperature in Toronto be 8\u00b0C on April 25?",
+      "city": "Toronto",
+      "date": "2026-04-25",
+      "forecast_max_c": 11.0,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.495,
+      "top_executable_ev": 0.48,
+      "top_best_ask": 0.52,
+      "confidence": "high",
+      "liquidity": 228.8211
+    },
+    {
+      "market": "Will the highest temperature in London be 21\u00b0C on April 25?",
+      "city": "London",
+      "date": "2026-04-25",
+      "forecast_max_c": 16.0,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.47,
+      "top_executable_ev": 0.46,
+      "top_best_ask": 0.54,
+      "confidence": "high",
+      "liquidity": 1048.8172
+    },
+    {
+      "market": "Will the lowest temperature in New York City be between 42-43\u00b0F on April 25?",
+      "city": "New York City",
+      "date": "2026-04-25",
+      "forecast_max_c": 9.4,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.46,
+      "top_executable_ev": 0.44,
+      "top_best_ask": 0.56,
+      "confidence": "high",
+      "liquidity": 896.6274
+    },
+    {
+      "market": "Will the highest temperature in Sao Paulo be 30\u00b0C on April 25?",
+      "city": "Sao Paulo",
+      "date": "2026-04-25",
+      "forecast_max_c": 29.0,
+      "sigma_c": 0.3,
+      "top_bucket": "No",
+      "top_bucket_ev": 0.4372,
+      "top_executable_ev": 0.4222,
+      "top_best_ask": 0.53,
+      "confidence": "high",
+      "liquidity": 261.8772
     }
   ],
-  "skipped": []
+  "skipped": [
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-16corbelow",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-17c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-18c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-19c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-20c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-21c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-22c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-23c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-24c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-25c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "lowest-temperature-in-hong-kong-on-april-24-2026-26corhigher",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-18corbelow",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-19c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-20c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-21c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-22c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-23c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-24c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-25c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-26c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-27c",
+      "no hourly values for 2026-04-24"
+    ],
+    [
+      "highest-temperature-in-hong-kong-on-april-24-2026-28corhigher",
+      "no hourly values for 2026-04-24"
+    ]
+  ]
 }

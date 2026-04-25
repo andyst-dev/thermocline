@@ -13,7 +13,7 @@ from ..models import WeatherMarket
 # Keep this deliberately strict. Broad words like "weather" or "storm" create
 # bad matches (e.g. Carolina Hurricanes, geopolitical descriptions, etc.).
 SCANNABLE_CITY_TEMP_RE = re.compile(
-    r"highest temperature in\s+.+?\s+on\s+[A-Za-z]+\s+\d{1,2}",
+    r"(?:highest|lowest) temperature in\s+.+?\s+be\s+.+?\s+on\s+[A-Za-z]+\s+\d{1,2}",
     flags=re.IGNORECASE,
 )
 GLOBAL_TEMP_RE = re.compile(

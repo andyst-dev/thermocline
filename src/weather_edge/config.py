@@ -24,7 +24,7 @@ def get_settings() -> Settings:
     project_root = Path(__file__).resolve().parents[2]
     db_path = Path(os.getenv("WEATHER_EDGE_DB", project_root / "data" / "weather_edge.db"))
     market_limit = int(os.getenv("WEATHER_EDGE_MARKET_LIMIT", "500"))
-    market_scan_pages = int(os.getenv("WEATHER_EDGE_MARKET_SCAN_PAGES", "60"))
+    market_scan_pages = int(os.getenv("WEATHER_EDGE_MARKET_SCAN_PAGES", "120"))
     min_liquidity = float(os.getenv("WEATHER_EDGE_MIN_LIQUIDITY", "50"))
     report_limit = int(os.getenv("WEATHER_EDGE_REPORT_LIMIT", "25"))
     use_fixtures = os.getenv("WEATHER_EDGE_USE_FIXTURES", "0").lower() in {"1", "true", "yes"}

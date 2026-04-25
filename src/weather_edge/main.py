@@ -55,7 +55,7 @@ def cmd_scan() -> None:
             insert_scan(conn, result)
             results.append(result)
 
-    results.sort(key=lambda r: (r.top_bucket_ev or -999), reverse=True)
+    results.sort(key=lambda r: max((b.executable_ev for b in r.buckets if b.executable_ev is not None), default=-999), reverse=True)
     output = [
         {
             "market": r.question,
@@ -65,6 +65,8 @@ def cmd_scan() -> None:
             "sigma_c": round(r.sigma_c, 2),
             "top_bucket": r.top_bucket_label,
             "top_bucket_ev": round(r.top_bucket_ev or 0.0, 4),
+            "top_executable_ev": round(max((b.executable_ev for b in r.buckets if b.executable_ev is not None), default=0.0), 4),
+            "top_best_ask": next((b.best_ask for b in r.buckets if b.label == r.top_bucket_label), None),
             "confidence": r.confidence,
             "liquidity": r.liquidity,
         }

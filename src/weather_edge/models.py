@@ -39,6 +39,9 @@ class BucketProbability:
     model_prob: float
     edge: float
     ev: float
+    best_bid: float | None = None
+    best_ask: float | None = None
+    executable_ev: float | None = None
 
 
 @dataclass

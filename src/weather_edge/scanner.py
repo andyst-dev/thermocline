@@ -1,16 +1,45 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
+from .clients.aviationweather import observed_extreme_c
+from .clients.clob import best_bid_ask
 from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
 from .config import Settings
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
-from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market
+from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_temperature_contract
 
 
 class ScanSkip(Exception):
     pass
+
+
+def _enrich_with_clob(settings: Settings, market: WeatherMarket, buckets: list[BucketProbability]) -> None:
+    token_ids = market.raw.get("clobTokenIds") or []
+    if isinstance(token_ids, str):
+        import json
+        try:
+            token_ids = json.loads(token_ids)
+        except json.JSONDecodeError:
+            token_ids = []
+    if not isinstance(token_ids, list) or len(token_ids) != len(market.outcomes):
+        return
+    token_by_label = {str(label): str(token_id) for label, token_id in zip(market.outcomes, token_ids, strict=False)}
+    for bucket in buckets:
+        token_id = token_by_label.get(bucket.label)
+        if not token_id:
+            continue
+        bid, ask = best_bid_ask(settings, token_id)
+        bucket.best_bid = bid
+        bucket.best_ask = ask
+        if ask is not None:
+            bucket.executable_ev = bucket.model_prob - ask
+
+
+def _sort_buckets(buckets: list[BucketProbability]) -> None:
+    buckets.sort(key=lambda x: x.executable_ev if x.executable_ev is not None else -999.0, reverse=True)
 
 
 def _extract_context(settings: Settings, market: WeatherMarket) -> MarketContext:
@@ -31,7 +60,7 @@ def _extract_context(settings: Settings, market: WeatherMarket) -> MarketContext
     )
 
 
-def _forecast_daily_max(forecast: dict, target_date: datetime) -> float:
+def _forecast_daily_extreme(forecast: dict, target_date: datetime, metric: str = "highest") -> float:
     hourly = forecast.get("hourly") or {}
     times = hourly.get("time") or []
     temps = hourly.get("temperature_2m") or []
@@ -44,7 +73,7 @@ def _forecast_daily_max(forecast: dict, target_date: datetime) -> float:
             values.append(float(temp))
     if not values:
         raise ScanSkip(f"no hourly values for {target_prefix}")
-    return max(values)
+    return min(values) if metric == "lowest" else max(values)
 
 
 def _sigma_for_horizon(target_date: datetime) -> tuple[float, float]:
@@ -58,7 +87,7 @@ def _sigma_for_horizon(target_date: datetime) -> tuple[float, float]:
 def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
     context = _extract_context(settings, market)
     forecast = fetch_hourly_forecast(settings, context.latitude, context.longitude, context.timezone)
-    forecast_max_c = _forecast_daily_max(forecast, context.target_date)
+    forecast_max_c = _forecast_daily_extreme(forecast, context.target_date, "highest")
     sigma_c, horizon_hours = _sigma_for_horizon(context.target_date)
 
     buckets: list[BucketProbability] = []
@@ -79,7 +108,8 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
             )
         )
 
-    buckets.sort(key=lambda x: x.ev, reverse=True)
+    _enrich_with_clob(settings, market, buckets)
+    _sort_buckets(buckets)
     top = buckets[0] if buckets else None
     confidence = "low"
     if sigma_c <= 2.5:
@@ -113,7 +143,95 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
     }
 
 
-def _scan_global_temperature_market(market: WeatherMarket) -> tuple[ScanResult, dict]:
+def _resolution_location(market: WeatherMarket, fallback_city: str) -> str:
+    source = str(market.raw.get("resolutionSource") or "")
+    match = re.search(r"/([A-Z]{4})(?:[/?#.]|$)", source)
+    if match:
+        return match.group(1)
+    description = str(market.raw.get("description") or "")
+    match = re.search(r"recorded at the (.+?) Station", description, flags=re.IGNORECASE)
+    if match:
+        station = match.group(1).replace("Intl", "International")
+        return station
+    return fallback_city
+
+
+def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
+    contract = parse_temperature_contract(market.question)
+    if not contract:
+        raise ScanSkip("question pattern unsupported")
+    resolution_location = _resolution_location(market, contract.city)
+    geo = geocode_city(settings, resolution_location)
+    if not geo:
+        raise ScanSkip(f"geocode failed for {resolution_location}")
+    timezone_name = str(geo.get("timezone") or "auto")
+    forecast = fetch_hourly_forecast(settings, float(geo["latitude"]), float(geo["longitude"]), timezone_name)
+    forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
+    sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date)
+    observed_count = 0
+    if re.fullmatch(r"[A-Z]{4}", resolution_location):
+        observed_value, observed_count = observed_extreme_c(resolution_location, contract.target_date, timezone_name, contract.metric)
+        if observed_value is not None:
+            forecast_value_c = observed_value
+            sigma_c = 0.3
+    bucket_prob = bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c)
+
+    buckets: list[BucketProbability] = []
+    for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
+        model_prob = bucket_prob if label.lower() == "yes" else 1.0 - bucket_prob
+        buckets.append(
+            BucketProbability(
+                label=label,
+                lower=contract.lower_c if label.lower() == "yes" else None,
+                upper=contract.upper_c if label.lower() == "yes" else None,
+                market_prob=market_prob,
+                model_prob=model_prob,
+                edge=model_prob - market_prob,
+                ev=model_prob - market_prob,
+            )
+        )
+
+    _enrich_with_clob(settings, market, buckets)
+    _sort_buckets(buckets)
+    top = buckets[0] if buckets else None
+    confidence = "low"
+    if sigma_c <= 2.5:
+        confidence = "medium"
+    if sigma_c <= 2.0 and horizon_hours <= 36:
+        confidence = "high"
+    result = ScanResult(
+        market_id=market.market_id,
+        slug=market.slug,
+        question=market.question,
+        city=contract.city,
+        target_date=contract.target_date.date().isoformat(),
+        forecast_max_c=forecast_value_c,
+        sigma_c=sigma_c,
+        horizon_hours=horizon_hours,
+        liquidity=market.liquidity,
+        buckets=buckets,
+        top_bucket_label=top.label if top else None,
+        top_bucket_ev=top.ev if top else None,
+        confidence=confidence,
+    )
+    return result, {
+        "context": {
+            "city": contract.city,
+            "latitude": float(geo["latitude"]),
+            "longitude": float(geo["longitude"]),
+            "timezone": timezone_name,
+            "metric": contract.metric,
+            "resolution_location": resolution_location,
+            "observed_metar_count": observed_count,
+            "bucket_label": contract.label,
+            "bucket_lower_c": contract.lower_c,
+            "bucket_upper_c": contract.upper_c,
+        },
+        "forecast": forecast,
+    }
+
+
+def _scan_global_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
     parsed = parse_global_temperature_market(market.question)
     if not parsed:
         raise ScanSkip("question pattern unsupported")
@@ -136,7 +254,8 @@ def _scan_global_temperature_market(market: WeatherMarket) -> tuple[ScanResult, 
             )
         )
 
-    buckets.sort(key=lambda x: x.ev, reverse=True)
+    _enrich_with_clob(settings, market, buckets)
+    _sort_buckets(buckets)
     top = buckets[0] if buckets else None
     result = ScanResult(
         market_id=market.market_id,
@@ -167,9 +286,11 @@ def _scan_global_temperature_market(market: WeatherMarket) -> tuple[ScanResult, 
 
 
 def scan_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
+    if parse_temperature_contract(market.question):
+        return _scan_temperature_contract(settings, market)
     if parse_city_and_date(market.question):
         return _scan_city_temperature_market(settings, market)
-    return _scan_global_temperature_market(market)
+    return _scan_global_temperature_market(settings, market)
 
 
 def filter_markets(markets: list[WeatherMarket], min_liquidity: float) -> list[WeatherMarket]:
