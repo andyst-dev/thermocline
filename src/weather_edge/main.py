@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from .audit import write_json_gz
-from .candidates import build_candidate
+from .candidates import build_candidate, compute_kelly_size
 from .clients.aviationweather import observed_extreme_c
 from .clients.clob import simulate_buy_fill
 from .clients.polymarket import fetch_market_by_id, fetch_weather_markets
@@ -117,7 +117,7 @@ def _generate_candidates(settings):
                 raw=forecast_meta,
             )
             insert_scan(conn, result)
-            candidates.append(build_candidate(market, result, forecast_meta))
+            candidates.append(build_candidate(market, result, forecast_meta, settings))
     candidates.sort(key=lambda c: (c.verdict == "PASS", c.verdict == "PAPER", c.score), reverse=True)
     return candidates, skipped
 
@@ -132,6 +132,15 @@ def cmd_verify_candidates() -> None:
         # snapshot for every displayed candidate with a token, even when paper
         # opening is disabled, so future audits can reproduce the quoted fill.
         refreshed = _refresh_candidate_fill_for_open(settings, candidate_dict, size_usd=1.0)
+        if refreshed is not None and refreshed.get("fill_avg_price") is not None:
+            refreshed["recommended_size_usd"] = compute_kelly_size(
+                model_prob=refreshed.get("model_prob"),
+                price=refreshed.get("fill_avg_price"),
+                kelly_fraction=settings.kelly_fraction,
+                max_size_usd=settings.max_position_size_usd,
+                min_size_usd=settings.min_position_size_usd,
+                bankroll_usd=settings.kelly_bankroll_usd,
+            )
         output.append(refreshed or candidate_dict)
     report = {
         "policy": {
@@ -189,7 +198,7 @@ def _refresh_candidate_fill_for_open(settings, candidate: dict, size_usd: float)
     return refreshed
 
 
-def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> None:
+def cmd_paper_open(limit: int, size_usd: float | None = None, include_paper: bool = False) -> None:
     settings = get_settings()
     candidates, _skipped = _generate_candidates(settings)
     allowed = {"PASS", "PAPER"} if include_paper else {"PASS"}
@@ -211,12 +220,40 @@ def cmd_paper_open(limit: int, size_usd: float, include_paper: bool = False) -> 
             key = candidate["market_id"]
             if key in existing:
                 continue
-            refreshed = _refresh_candidate_fill_for_open(settings, candidate, size_usd)
-            if refreshed is None:
-                continue
-            insert_paper_trade(conn, candidate=refreshed, size_usd=size_usd, notes="auto paper-open from verified candidates")
-            opened.append(refreshed)
-            existing.add(key)
+            if size_usd is None:
+                # Kelly dynamic sizing
+                refresh_1 = _refresh_candidate_fill_for_open(settings, candidate, size_usd=1.0)
+                if refresh_1 is None:
+                    continue
+                price_for_kelly = refresh_1.get("fill_avg_price") if refresh_1.get("fill_avg_price") is not None else refresh_1.get("best_ask")
+                model_prob = refresh_1.get("model_prob")
+                kelly_size = compute_kelly_size(
+                    model_prob=model_prob,
+                    price=price_for_kelly,
+                    kelly_fraction=settings.kelly_fraction,
+                    max_size_usd=settings.max_position_size_usd,
+                    min_size_usd=settings.min_position_size_usd,
+                    bankroll_usd=settings.kelly_bankroll_usd,
+                )
+                ask_capacity_usd = refresh_1.get("ask_capacity_usd")
+                if ask_capacity_usd is not None and ask_capacity_usd < settings.min_position_size_usd:
+                    continue
+                if ask_capacity_usd is not None:
+                    kelly_size = min(kelly_size, float(ask_capacity_usd))
+                # Re-run refresh with the actual kelly size
+                refreshed = _refresh_candidate_fill_for_open(settings, refresh_1, size_usd=kelly_size)
+                if refreshed is None:
+                    continue
+                insert_paper_trade(conn, candidate=refreshed, size_usd=kelly_size, notes="auto paper-open from verified candidates")
+                opened.append(refreshed)
+                existing.add(key)
+            else:
+                refreshed = _refresh_candidate_fill_for_open(settings, candidate, size_usd)
+                if refreshed is None:
+                    continue
+                insert_paper_trade(conn, candidate=refreshed, size_usd=size_usd, notes="auto paper-open from verified candidates")
+                opened.append(refreshed)
+                existing.add(key)
     report_path = settings.project_root / "reports" / "paper_opened.json"
     report_path.write_text(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2), encoding="utf-8")
     print(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2))
@@ -595,7 +632,7 @@ def cmd_paper_cycle() -> None:
     if os.environ.get("WEATHER_EDGE_DISABLE_PAPER_OPEN") == "1":
         print("Paper opening disabled by WEATHER_EDGE_DISABLE_PAPER_OPEN=1")
     else:
-        cmd_paper_open(limit=5, size_usd=1.0, include_paper=False)
+        cmd_paper_open(limit=5, size_usd=None, include_paper=False)
     cmd_paper_settle()
     cmd_paper_report()
 
@@ -615,7 +652,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("verify-candidates")
     paper_open = sub.add_parser("paper-open")
     paper_open.add_argument("--limit", type=int, default=5)
-    paper_open.add_argument("--size-usd", type=float, default=1.0)
+    paper_open.add_argument("--size-usd", type=float, default=None, help="Flat position size in USD. Omit to enable Kelly dynamic sizing.")
     paper_open.add_argument("--include-paper", action="store_true")
     sub.add_parser("paper-report")
     sub.add_parser("paper-settle")

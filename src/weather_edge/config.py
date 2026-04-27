@@ -19,6 +19,10 @@ class Settings:
     report_limit: int = 25
     max_open_positions: int = 25
     use_fixtures: bool = False
+    kelly_fraction: float = 0.25
+    max_position_size_usd: float = 50.0
+    min_position_size_usd: float = 1.0
+    kelly_bankroll_usd: float = 100.0
 
 
 def get_settings() -> Settings:
@@ -30,6 +34,10 @@ def get_settings() -> Settings:
     report_limit = int(os.getenv("WEATHER_EDGE_REPORT_LIMIT", "25"))
     max_open_positions = int(os.getenv("WEATHER_EDGE_MAX_OPEN_POSITIONS", "25"))
     use_fixtures = os.getenv("WEATHER_EDGE_USE_FIXTURES", "0").lower() in {"1", "true", "yes"}
+    kelly_fraction = float(os.getenv("WEATHER_EDGE_KELLY_FRACTION", "0.25"))
+    max_position_size_usd = float(os.getenv("WEATHER_EDGE_MAX_POSITION_SIZE_USD", "50"))
+    min_position_size_usd = float(os.getenv("WEATHER_EDGE_MIN_POSITION_SIZE_USD", "1"))
+    kelly_bankroll_usd = float(os.getenv("WEATHER_EDGE_KELLY_BANKROLL_USD", "100"))
     return Settings(
         project_root=project_root,
         db_path=db_path,
@@ -39,4 +47,8 @@ def get_settings() -> Settings:
         report_limit=report_limit,
         max_open_positions=max_open_positions,
         use_fixtures=use_fixtures,
+        kelly_fraction=kelly_fraction,
+        max_position_size_usd=max_position_size_usd,
+        min_position_size_usd=min_position_size_usd,
+        kelly_bankroll_usd=kelly_bankroll_usd,
     )

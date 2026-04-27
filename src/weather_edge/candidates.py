@@ -6,6 +6,27 @@ from typing import Any
 from .models import BucketProbability, ScanResult, WeatherMarket
 
 
+def compute_kelly_size(
+    model_prob: float | None,
+    price: float | None,
+    kelly_fraction: float = 0.25,
+    max_size_usd: float = 50.0,
+    min_size_usd: float = 1.0,
+    bankroll_usd: float = 100.0,
+) -> float:
+    if model_prob is None or price is None or price <= 0 or price >= 1:
+        return min_size_usd
+    b = (1.0 / price) - 1.0
+    if b <= 0:
+        return min_size_usd
+    q = 1.0 - model_prob
+    kelly_f = (b * model_prob - q) / b
+    if kelly_f <= 0:
+        return 0.0
+    size = kelly_fraction * kelly_f * bankroll_usd
+    return float(min(max_size_usd, max(min_size_usd, size)))
+
+
 @dataclass(frozen=True)
 class Candidate:
     verdict: str
@@ -41,8 +62,9 @@ class Candidate:
     observed_authority: str | None
     bucket_width_c: float | None
     resolution_source: str | None
-    model_prob_gaussian: float | None
-    model_prob_ensemble: float | None
+    model_prob_gaussian: float | None = None
+    model_prob_ensemble: float | None = None
+    recommended_size_usd: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +103,7 @@ class Candidate:
             "resolution_source": self.resolution_source,
             "model_prob_gaussian": round(self.model_prob_gaussian, 4) if self.model_prob_gaussian is not None else None,
             "model_prob_ensemble": round(self.model_prob_ensemble, 4) if self.model_prob_ensemble is not None else None,
+            "recommended_size_usd": round(self.recommended_size_usd, 4) if self.recommended_size_usd is not None else None,
         }
 
 
@@ -91,7 +114,7 @@ def _top_bucket(result: ScanResult) -> BucketProbability | None:
     return max(result.buckets, key=lambda b: b.ev, default=None)
 
 
-def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: dict[str, Any]) -> Candidate:
+def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: dict[str, Any], settings=None) -> Candidate:
     top = _top_bucket(result)
     context = forecast_meta.get("context") or {}
     resolution_location = context.get("resolution_location")
@@ -151,6 +174,18 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     book_snapshot_path = top.book_snapshot_path if top else None
     book_snapshot_hash = top.book_snapshot_hash if top else None
     token_id = top.token_id if top else None
+
+    price_for_kelly = fill_avg_price if fill_avg_price is not None else (ask if ask is not None else gamma_price)
+    recommended_size_usd = None
+    if settings is not None:
+        recommended_size_usd = compute_kelly_size(
+            model_prob=model_prob,
+            price=price_for_kelly,
+            kelly_fraction=settings.kelly_fraction,
+            max_size_usd=settings.max_position_size_usd,
+            min_size_usd=settings.min_position_size_usd,
+            bankroll_usd=settings.kelly_bankroll_usd,
+        )
 
     score = 0.0
     if exec_ev is not None:
@@ -212,4 +247,5 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         resolution_source=str(resolution_source) if resolution_source else None,
         model_prob_gaussian=model_prob_gaussian,
         model_prob_ensemble=model_prob_ensemble,
+        recommended_size_usd=recommended_size_usd,
     )
