@@ -10,7 +10,10 @@ from weather_edge.backtest import (
     HORIZON_BUCKETS,
     aggregate_sigma,
     horizon_bucket,
+    load_sigma_calibration,
+    recalibrate_sigma,
     season_from_month,
+    sigma_for_horizon_and_season,
 )
 
 
@@ -156,3 +159,84 @@ class TestAggregateSigma:
         assert agg["overall"]["mean_residual_c"] == pytest.approx(0.0, abs=1e-9)
         assert agg["overall"]["min_residual_c"] == pytest.approx(-2.0)
         assert agg["overall"]["max_residual_c"] == pytest.approx(2.0)
+
+
+class TestSigmaForHorizonAndSeason:
+    def test_uses_calibration_when_enough_samples(self):
+        calibration = {
+            "by_horizon_season": {
+                "24-48h|spring": {"count": 5, "sigma_c": 2.3},
+            },
+            "by_horizon": {},
+        }
+        result = sigma_for_horizon_and_season(36.0, "2026-04-15", calibration)
+        assert result == pytest.approx(2.3)
+
+    def test_falls_back_to_horizon_only(self):
+        calibration = {
+            "by_horizon_season": {
+                "24-48h|spring": {"count": 2, "sigma_c": 1.5},
+            },
+            "by_horizon": {
+                "24-48h": {"count": 12, "sigma_c": 2.5},
+            },
+        }
+        result = sigma_for_horizon_and_season(36.0, "2026-04-15", calibration)
+        assert result == pytest.approx(2.5)
+
+    def test_returns_none_when_insufficient_data(self):
+        calibration = {
+            "by_horizon_season": {},
+            "by_horizon": {
+                "24-48h": {"count": 3, "sigma_c": 2.0},
+            },
+        }
+        result = sigma_for_horizon_and_season(36.0, "2026-04-15", calibration)
+        assert result is None
+
+    def test_returns_none_when_calibration_is_none(self):
+        assert sigma_for_horizon_and_season(36.0, "2026-04-15", None) is None
+
+
+class TestRecalibrateSigma:
+    def test_creates_json_file(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        import sqlite3
+
+        conn = sqlite3.connect(db_path)
+        conn.executescript("""
+            CREATE TABLE backtest_records (
+                id INTEGER PRIMARY KEY,
+                city TEXT, latitude REAL, longitude REAL,
+                target_date TEXT, reference_date TEXT,
+                horizon_hours REAL, forecast_max_c REAL,
+                observed_max_c REAL, residual_c REAL,
+                metric TEXT, model_source TEXT,
+                fetched_at TEXT, created_at TEXT
+            );
+        """)
+        conn.execute(
+            "INSERT INTO backtest_records (city, latitude, longitude, target_date, reference_date, "
+            "horizon_hours, forecast_max_c, observed_max_c, residual_c, metric, model_source, fetched_at, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("TestCity", 0.0, 0.0, "2026-04-20", "2026-04-19", 24.0, 22.0, 20.0, 2.0, "highest", "live_scanner", "2026-04-19T00:00:00", "2026-04-19T00:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO backtest_records (city, latitude, longitude, target_date, reference_date, "
+            "horizon_hours, forecast_max_c, observed_max_c, residual_c, metric, model_source, fetched_at, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("TestCity", 0.0, 0.0, "2026-04-21", "2026-04-20", 48.0, 19.0, 20.0, -1.0, "highest", "live_scanner", "2026-04-20T00:00:00", "2026-04-20T00:00:00"),
+        )
+        conn.commit()
+        conn.close()
+
+        aggregates = recalibrate_sigma(db_path, tmp_path, lookback_days=60)
+        calibration_path = tmp_path / "data" / "sigma_calibration.json"
+        assert calibration_path.exists()
+        loaded = load_sigma_calibration(tmp_path)
+        assert loaded is not None
+        assert loaded["total_records"] == 2
+        assert "calibrated_at" in loaded
+        assert loaded["lookback_days"] == 60
+        assert loaded["by_horizon"]["24-48h"]["count"] == 1
+        assert loaded["by_horizon"]["48-72h"]["count"] == 1

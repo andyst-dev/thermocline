@@ -19,6 +19,11 @@ from .clients.openmeteo_historical import fetch_archive_observed, fetch_historic
 from .config import Settings
 
 
+SIGMA_CALIBRATION_FILENAME = "sigma_calibration.json"
+MIN_HORIZON_SEASON_SAMPLES = 5
+MIN_HORIZON_SAMPLES = 10
+
+
 HORIZON_BUCKETS: list[tuple[str, float, float]] = [
     ("0-12h", 0.0, 12.0),
     ("12-24h", 12.0, 24.0),
@@ -214,6 +219,109 @@ def aggregate_sigma(records: list[BacktestRecord]) -> dict:
         "by_horizon_season": {label: _group_stats(vals) for label, vals in by_horizon_season.items()},
         "overall": _group_stats([r.residual_c for r in records]),
     }
+
+
+def load_sigma_calibration(project_root: Path) -> dict | None:
+    """Load the latest sigma calibration JSON if available."""
+    path = project_root / "data" / SIGMA_CALIBRATION_FILENAME
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def sigma_for_horizon_and_season(
+    horizon_hours: float,
+    target_date: str,
+    calibration: dict | None,
+) -> float | None:
+    """Pick an empirically-calibrated sigma for the given horizon and season.
+
+    Prefers the horizon|season cross bucket once it has enough samples; falls
+    back to the horizon-only bucket; returns None if neither has enough data.
+    """
+    if calibration is None:
+        return None
+    bucket = horizon_bucket(horizon_hours)
+    try:
+        month = date.fromisoformat(target_date).month
+        season = season_from_month(month)
+    except ValueError:
+        season = None
+
+    by_horizon_season = calibration.get("by_horizon_season") or {}
+    by_horizon = calibration.get("by_horizon") or {}
+
+    if season is not None:
+        cross = by_horizon_season.get(f"{bucket}|{season}")
+        if isinstance(cross, dict):
+            count = cross.get("count") or 0
+            sigma = cross.get("sigma_c")
+            if count >= MIN_HORIZON_SEASON_SAMPLES and isinstance(sigma, (int, float)):
+                return float(sigma)
+
+    horizon_only = by_horizon.get(bucket)
+    if isinstance(horizon_only, dict):
+        count = horizon_only.get("count") or 0
+        sigma = horizon_only.get("sigma_c")
+        if count >= MIN_HORIZON_SAMPLES and isinstance(sigma, (int, float)):
+            return float(sigma)
+
+    return None
+
+
+def recalibrate_sigma(db_path: Path, project_root: Path, lookback_days: int = 60) -> dict:
+    """Rebuild sigma calibration from recent backtest_records and persist it."""
+    import sqlite3
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = list(
+            conn.execute(
+                "SELECT * FROM backtest_records "
+                "WHERE target_date >= date('now', ?) "
+                "ORDER BY target_date DESC",
+                (f"-{int(lookback_days)} days",),
+            )
+        )
+    finally:
+        conn.close()
+
+    records: list[BacktestRecord] = []
+    for row in rows:
+        records.append(
+            BacktestRecord(
+                city=row["city"],
+                latitude=float(row["latitude"]),
+                longitude=float(row["longitude"]),
+                target_date=row["target_date"],
+                reference_date=row["reference_date"],
+                horizon_hours=float(row["horizon_hours"]),
+                forecast_max_c=float(row["forecast_max_c"]),
+                observed_max_c=float(row["observed_max_c"]),
+                residual_c=float(row["residual_c"]),
+                metric=row["metric"],
+                model_source=row["model_source"],
+                fetched_at=row["fetched_at"],
+            )
+        )
+
+    aggregates = aggregate_sigma(records)
+    aggregates["calibrated_at"] = datetime.now(dt_timezone.utc).isoformat()
+    aggregates["lookback_days"] = int(lookback_days)
+
+    out_dir = project_root / "data"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / SIGMA_CALIBRATION_FILENAME
+    out_path.write_text(json.dumps(aggregates, indent=2), encoding="utf-8")
+    return aggregates
 
 
 def write_backtest_report(project_root: Path, records: list[BacktestRecord], aggregates: dict) -> tuple[Path, Path]:

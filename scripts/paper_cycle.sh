@@ -53,6 +53,11 @@ Path("$HEARTBEAT").write_text(json.dumps({
 PY
     exit "$code"
   fi
+  # Daily sigma recalibration at 06:00 UTC
+  HOUR=$(date -u +%H)
+  if [ "$HOUR" = "06" ]; then
+    PYTHONPATH=src python3 -m weather_edge.main recalibrate-sigma --lookback-days 60 >> logs/paper_cycle.log 2>&1 || true
+  fi
   python3 - <<PY
 import json
 from datetime import datetime, timezone

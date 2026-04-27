@@ -5,6 +5,7 @@ import math
 import re
 from datetime import datetime, timezone
 
+from .backtest import load_sigma_calibration, sigma_for_horizon_and_season
 from .clients.aviationweather import observed_extreme_c
 from .clients.clob import simulate_buy_fill
 from .clients.nasa_gistemp import global_temp_baseline
@@ -124,11 +125,19 @@ def _forecast_daily_extreme(forecast: dict, target_date: datetime, metric: str =
     return min(values) if metric == "lowest" else max(values)
 
 
-def _sigma_for_horizon(target_date: datetime) -> tuple[float, float]:
+def _sigma_for_horizon(target_date: datetime, settings: Settings | None = None) -> tuple[float, float]:
     horizon_hours = (target_date - datetime.now(timezone.utc)).total_seconds() / 3600
     if horizon_hours < 0:
         horizon_hours = 0.0
-    sigma_c = min(5.0, 1.5 + (horizon_hours / 72.0) * 2.5)
+    sigma_c: float | None = None
+    if settings is not None:
+        calibration = load_sigma_calibration(settings.project_root)
+        if calibration is not None:
+            sigma_c = sigma_for_horizon_and_season(
+                horizon_hours, target_date.date().isoformat(), calibration
+            )
+    if sigma_c is None:
+        sigma_c = min(5.0, 1.5 + (horizon_hours / 72.0) * 2.5)
     return sigma_c, horizon_hours
 
 
@@ -138,7 +147,7 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
     metric = parsed_metric[0] if parsed_metric else "highest"
     forecast = fetch_hourly_forecast(settings, context.latitude, context.longitude, context.timezone)
     forecast_max_c = _forecast_daily_extreme(forecast, context.target_date, metric)
-    sigma_c, horizon_hours = _sigma_for_horizon(context.target_date)
+    sigma_c, horizon_hours = _sigma_for_horizon(context.target_date, settings)
 
     # Fetch GFS ensemble for mid-to-long horizons where Gaussian sigma is regime-blind
     ensemble = None
@@ -236,7 +245,7 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     timezone_name = str(geo.get("timezone") or "auto")
     forecast = fetch_hourly_forecast(settings, float(geo["latitude"]), float(geo["longitude"]), timezone_name)
     forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
-    sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date)
+    sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date, settings)
 
     # Fetch GFS ensemble for mid-to-long horizons
     ensemble = None

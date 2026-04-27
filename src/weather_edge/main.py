@@ -741,6 +741,32 @@ def cmd_backtest(
     print(f"Saved report: {md_path}")
 
 
+def cmd_recalibrate_sigma(lookback_days: int = 60) -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    aggregates = recalibrate_sigma(settings.db_path, settings.project_root, lookback_days)
+    print(f"Sigma calibration complete (lookback={lookback_days} days)")
+    print("")
+    print("Empirical sigma by horizon bucket:")
+    for label, _, _ in HORIZON_BUCKETS:
+        stats = aggregates["by_horizon"][label]
+        print(
+            f"  {label}: count={stats['count']} sigma={stats['sigma_c']} "
+            f"mean={stats['mean_residual_c']} mae={stats['median_abs_error_c']}"
+        )
+    print("")
+    print("Empirical sigma by horizon|season:")
+    for key, stats in sorted(aggregates.get("by_horizon_season", {}).items()):
+        print(
+            f"  {key}: count={stats['count']} sigma={stats['sigma_c']} "
+            f"mean={stats['mean_residual_c']} mae={stats['median_abs_error_c']}"
+        )
+    # Also save a copy to reports for convenience
+    report_path = settings.project_root / "reports" / "sigma_calibration.json"
+    report_path.write_text(json.dumps(aggregates, indent=2), encoding="utf-8")
+    print(f"Saved report: {report_path}")
+
+
 def cmd_run_once() -> None:
     cmd_init_db()
     cmd_fetch_markets()
@@ -763,6 +789,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("reconcile-sources")
     sub.add_parser("paper-cycle")
     sub.add_parser("run-once")
+    recalibrate = sub.add_parser("recalibrate-sigma")
+    recalibrate.add_argument("--lookback-days", type=int, default=60, help="Days of backtest records to use")
     backtest = sub.add_parser("backtest")
     backtest.add_argument("--cities", type=str, default=None, help="Comma-separated city list")
     backtest.add_argument("--start-date", type=str, required=True, help="YYYY-MM-DD")
@@ -795,6 +823,8 @@ def main() -> None:
         cmd_paper_cycle()
     elif args.command == "run-once":
         cmd_run_once()
+    elif args.command == "recalibrate-sigma":
+        cmd_recalibrate_sigma(lookback_days=args.lookback_days)
     elif args.command == "backtest":
         cities = [c.strip() for c in args.cities.split(",") if c.strip()] if args.cities else None
         horizons = [int(h.strip()) for h in args.horizons.split(",") if h.strip()] if args.horizons else None
