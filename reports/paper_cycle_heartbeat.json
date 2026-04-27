@@ -1,20 +1,24 @@
 {
-  "finished_at": "2026-04-25T23:45:44.193576+00:00",
+  "finished_at": "2026-04-27T13:41:29.094632+00:00",
   "exit_code": 0,
   "status": "ok",
-  "backup": "data/backups/weather_edge-2026-04-25.db.gz",
+  "backup": "data/backups/weather_edge-2026-04-27.db.gz",
   "summary": {
     "paper_trades": {
-      "trades": 21,
-      "closed": 6,
-      "open": 15,
+      "trades": 42,
+      "closed": 42,
+      "open": 0,
       "duplicates_excluded": 3,
-      "total_at_risk_usd": 21.0,
-      "closed_pnl_usd": -6.0
+      "closed_with_simulated_fill": 31,
+      "closed_without_simulated_fill": 11,
+      "total_at_risk_usd": 42.0,
+      "closed_pnl_usd": -42.0,
+      "closed_pnl_with_simulated_fill_usd": -31.0,
+      "pnl_note": "closed_pnl_usd includes legacy paper trades without simulated fills; use closed_pnl_with_simulated_fill_usd for cleaner post-fill accounting"
     },
     "paper_settlement": {
       "settled": 0,
-      "pending": 15,
+      "pending": 0,
       "pnl_usd": 0
     }
   }
