@@ -8,3 +8,6 @@ __pycache__/
 data/backups/
 data/*.db-wal
 data/*.db-shm
+
+# SQLite database
+data/weather_edge.db
