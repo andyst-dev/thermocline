@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import datetime, timezone
 
@@ -8,13 +9,45 @@ from .clients.aviationweather import observed_extreme_c
 from .clients.clob import simulate_buy_fill
 from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
+from .clients.weathercom import official_extreme_c
 from .config import Settings
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
-from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_temperature_contract
+from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_metric_city_and_date, parse_temperature_contract
 
 
 class ScanSkip(Exception):
     pass
+
+
+# Calibration constants for observed-value sigma.
+# These encode empirically-estimated uncertainty components when a station
+# observation is available (METAR or official source).
+SIGMA_STATION = 0.30       # Instrument / reading noise at the station
+# NOTE (2026-04-27): Original 0.72 was inflated by a lookback-window bug in
+# aviationweather.py (truncated METAR fetch for Asia/South-America legacy trades).
+# After fixing the bug, empirical std-dev on clean data is ~0.35-0.40°C.
+# We use 0.50 as a conservative midpoint until more post-fix data accumulates.
+SIGMA_DIVERGENCE = 0.50    # Official-source vs METAR divergence (cleaned)
+SIGMA_ROUNDING = 0.25      # Resolution-method rounding uncertainty (Gamma half-step)
+
+
+def _effective_sigma_observed(
+    sigma_station: float = SIGMA_STATION,
+    sigma_divergence: float = SIGMA_DIVERGENCE,
+    sigma_rounding: float = SIGMA_ROUNDING,
+) -> float:
+    """Effective sigma when a station observation is available.
+
+    Combines station instrument noise, source-METAR divergence,
+    and resolution-method rounding into a single standard deviation
+    via quadratic sum (assuming independent errors).
+
+    With current defaults: sqrt(0.30² + 0.72² + 0.25²) ≈ 0.82 °C.
+    This replaces the previous hard-coded 0.3 °C which ignored two
+    major error components and led to over-confident probabilities
+    on narrow temperature buckets.
+    """
+    return math.sqrt(sigma_station ** 2 + sigma_divergence ** 2 + sigma_rounding ** 2)
 
 
 def _cap_model_prob(prob: float) -> float:
@@ -100,8 +133,10 @@ def _sigma_for_horizon(target_date: datetime) -> tuple[float, float]:
 
 def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
     context = _extract_context(settings, market)
+    parsed_metric = parse_metric_city_and_date(market.question)
+    metric = parsed_metric[0] if parsed_metric else "highest"
     forecast = fetch_hourly_forecast(settings, context.latitude, context.longitude, context.timezone)
-    forecast_max_c = _forecast_daily_extreme(forecast, context.target_date, "highest")
+    forecast_max_c = _forecast_daily_extreme(forecast, context.target_date, metric)
     sigma_c, horizon_hours = _sigma_for_horizon(context.target_date)
 
     buckets: list[BucketProbability] = []
@@ -152,6 +187,7 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
             "latitude": context.latitude,
             "longitude": context.longitude,
             "timezone": context.timezone,
+            "metric": metric,
         },
         "forecast": forecast,
     }
@@ -183,11 +219,21 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
     sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date)
     observed_count = 0
+    observed_authority = None
+    resolution_source = str(market.raw.get("resolutionSource") or market.raw.get("resolution_source") or "")
     if re.fullmatch(r"[A-Z]{4}", resolution_location):
-        observed_value, observed_count = observed_extreme_c(resolution_location, contract.target_date, timezone_name, contract.metric)
+        observed_value = None
+        if "wunderground.com" in resolution_source.lower() or "weather.com" in resolution_source.lower():
+            observed_value, observed_count, _official_note = official_extreme_c(resolution_source, contract.target_date, contract.metric)
+            if observed_value is not None:
+                observed_authority = "weathercom_wunderground"
+        if observed_value is None:
+            observed_value, observed_count = observed_extreme_c(resolution_location, contract.target_date, timezone_name, contract.metric)
+            if observed_value is not None:
+                observed_authority = "metar"
         if observed_value is not None:
             forecast_value_c = observed_value
-            sigma_c = 0.3
+            sigma_c = _effective_sigma_observed()
     bucket_prob = _cap_model_prob(bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c))
 
     buckets: list[BucketProbability] = []
@@ -237,6 +283,7 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
             "metric": contract.metric,
             "resolution_location": resolution_location,
             "observed_metar_count": observed_count,
+            "observed_authority": observed_authority,
             "bucket_label": contract.label,
             "bucket_lower_c": contract.lower_c,
             "bucket_upper_c": contract.upper_c,

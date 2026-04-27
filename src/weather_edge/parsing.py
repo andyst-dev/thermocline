@@ -55,6 +55,23 @@ def parse_city_and_date(question: str) -> tuple[str, datetime] | None:
     return city, target
 
 
+def parse_metric_city_and_date(question: str) -> tuple[str, str, datetime] | None:
+    match = re.search(
+        r"(?P<metric>highest|lowest) temperature in\s+(?P<city>.+?)\s+on\s+"
+        r"(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})(?:,?\s*(?P<year>\d{4}))?",
+        question,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    month = MONTHS.get(match.group("month").lower())
+    if month is None:
+        return None
+    year = int(match.group("year") or datetime.now(timezone.utc).year)
+    target = datetime(year, month, int(match.group("day")), tzinfo=timezone.utc)
+    return match.group("metric").lower(), match.group("city").strip(" ?"), target
+
+
 def _to_celsius(value: float, unit: str) -> float:
     if unit.upper() == "F":
         return (value - 32.0) * 5.0 / 9.0

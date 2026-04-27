@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from .audit import write_json_gz
 from .candidates import build_candidate
+from .clients.aviationweather import observed_extreme_c
 from .clients.clob import simulate_buy_fill
 from .clients.polymarket import fetch_market_by_id, fetch_weather_markets
+from .clients.weathercom import icao_from_wunderground_source, official_extreme_c
 from .config import get_settings
 from .db import close_paper_trade, connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
-from .scanner import ScanSkip, filter_markets, scan_market
+from .parsing import parse_temperature_contract
+from .scanner import ScanSkip, filter_markets, scan_market, _effective_sigma_observed
 from .settlement import settle_candidate
+from .timezones import timezone_hint_for_icao
 
 
 def cmd_init_db() -> None:
@@ -120,7 +125,14 @@ def _generate_candidates(settings):
 def cmd_verify_candidates() -> None:
     settings = get_settings()
     candidates, skipped = _generate_candidates(settings)
-    output = [candidate.as_dict() for candidate in candidates[: settings.report_limit]]
+    output = []
+    for candidate in candidates[: settings.report_limit]:
+        candidate_dict = candidate.as_dict()
+        # Verification reports are used for manual review. Keep a raw CLOB book
+        # snapshot for every displayed candidate with a token, even when paper
+        # opening is disabled, so future audits can reproduce the quoted fill.
+        refreshed = _refresh_candidate_fill_for_open(settings, candidate_dict, size_usd=1.0)
+        output.append(refreshed or candidate_dict)
     report = {
         "policy": {
             "meaning": "PASS is a candidate for manual verification, not permission to trade automatically.",
@@ -325,6 +337,110 @@ def cmd_paper_settle() -> None:
     print(f"Saved report: {report_path}")
 
 
+def _gamma_price_for_side(settings, row) -> tuple[bool, float | None, str]:
+    try:
+        market = fetch_market_by_id(settings, str(row["market_id"]))
+    except Exception as exc:
+        return False, None, f"gamma_fetch_failed: {exc}"
+    if market is None:
+        return False, None, "gamma_missing"
+    if not market.closed:
+        return False, None, "gamma_open"
+    try:
+        price_by_side = {str(label): float(price) for label, price in zip(market.outcomes, market.outcome_prices, strict=False)}
+    except (TypeError, ValueError):
+        return True, None, "gamma_bad_prices"
+    return True, price_by_side.get(str(row["side"])), "gamma_closed"
+
+
+def cmd_reconcile_sources() -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    rows_out = []
+    with connect(settings.db_path) as conn:
+        rows = list_paper_trades(conn)
+    for row in rows:
+        if row["status"] == "duplicate":
+            continue
+        candidate = json.loads(row["candidate_json"])
+        contract = parse_temperature_contract(row["question"])
+        source = candidate.get("resolution_source")
+        icao = candidate.get("resolution_location") or icao_from_wunderground_source(source)
+        if isinstance(icao, str) and len(icao) != 4:
+            icao = icao_from_wunderground_source(source)
+        gamma_closed, gamma_price, gamma_note = _gamma_price_for_side(settings, row)
+        official_value = None
+        official_count = 0
+        official_note = "unsupported_contract_or_source"
+        metar_value = None
+        metar_count = 0
+        if contract:
+            official_value, official_count, official_note = official_extreme_c(source, contract.target_date, contract.metric)
+            if isinstance(icao, str) and len(icao) == 4:
+                metar_value, metar_count = observed_extreme_c(icao, contract.target_date, timezone_hint_for_icao(icao), contract.metric)
+        diff = None
+        if official_value is not None and metar_value is not None:
+            diff = round(float(official_value) - float(metar_value), 3)
+        flags = []
+        if gamma_closed:
+            flags.append("gamma_official")
+        if official_value is None:
+            flags.append("official_source_missing")
+        if diff is not None and abs(diff) > 1.0:
+            flags.append("source_metar_diff_gt_1c")
+        if candidate.get("fill_avg_price") is None or candidate.get("fill_cost_usd") is None:
+            flags.append("legacy_no_simulated_fill")
+        rows_out.append({
+            "id": row["id"],
+            "status": row["status"],
+            "question": row["question"],
+            "side": row["side"],
+            "entry_price": row["entry_price"],
+            "pnl_usd": row["pnl_usd"],
+            "gamma_closed": gamma_closed,
+            "gamma_side_price": gamma_price,
+            "gamma_note": gamma_note,
+            "resolution_source": source,
+            "resolution_location": icao,
+            "official_value_c": official_value,
+            "official_count": official_count,
+            "official_note": official_note,
+            "metar_value_c": metar_value,
+            "metar_count": metar_count,
+            "official_minus_metar_c": diff,
+            "flags": flags,
+        })
+    summary = {
+        "rows": len(rows_out),
+        "gamma_closed": sum(1 for r in rows_out if r["gamma_closed"]),
+        "official_source_missing": sum(1 for r in rows_out if "official_source_missing" in r["flags"]),
+        "source_metar_diff_gt_1c": sum(1 for r in rows_out if "source_metar_diff_gt_1c" in r["flags"]),
+        "legacy_no_simulated_fill": sum(1 for r in rows_out if "legacy_no_simulated_fill" in r["flags"]),
+    }
+    report = {"summary": summary, "rows": rows_out}
+    json_path = settings.project_root / "reports" / "source_reconciliation.json"
+    json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    md_lines = [
+        "# Source reconciliation",
+        "",
+        f"Rows: {summary['rows']}",
+        f"Gamma closed: {summary['gamma_closed']}",
+        f"Official source missing: {summary['official_source_missing']}",
+        f"Official/METAR diff >1°C: {summary['source_metar_diff_gt_1c']}",
+        f"Legacy no simulated fill: {summary['legacy_no_simulated_fill']}",
+        "",
+        "## Flagged rows",
+    ]
+    for r in rows_out:
+        if r["flags"]:
+            md_lines.append(f"- #{r['id']} {r['side']} — {r['question']} — flags={','.join(r['flags'])} — official={r['official_value_c']} metar={r['metar_value_c']} gamma={r['gamma_side_price']}")
+    md_path = settings.project_root / "reports" / "source_reconciliation.md"
+    md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    print(f"Saved report: {json_path}")
+    print(f"Saved report: {md_path}")
+
+
 def cmd_paper_report() -> None:
     settings = get_settings()
     init_db(settings.db_path)
@@ -355,15 +471,29 @@ def cmd_paper_report() -> None:
             "resolution_source": candidate.get("resolution_source"),
             "resolution_location": candidate.get("resolution_location"),
         })
-    closed_pnl = sum(float(row["pnl_usd"] or 0.0) for row in active_rows if row["status"] == "closed")
+    closed_rows = [row for row in active_rows if row["status"] == "closed"]
+    filled_closed_rows = []
+    unfilled_closed_rows = []
+    for row in closed_rows:
+        candidate = json.loads(row["candidate_json"])
+        if candidate.get("fill_avg_price") is None or candidate.get("fill_cost_usd") is None:
+            unfilled_closed_rows.append(row)
+        else:
+            filled_closed_rows.append(row)
+    closed_pnl = sum(float(row["pnl_usd"] or 0.0) for row in closed_rows)
+    closed_pnl_filled = sum(float(row["pnl_usd"] or 0.0) for row in filled_closed_rows)
     report = {
         "summary": {
             "trades": len(trades),
-            "closed": sum(1 for row in active_rows if row["status"] == "closed"),
+            "closed": len(closed_rows),
             "open": sum(1 for row in active_rows if row["status"] == "open"),
             "duplicates_excluded": len(duplicate_rows),
+            "closed_with_simulated_fill": len(filled_closed_rows),
+            "closed_without_simulated_fill": len(unfilled_closed_rows),
             "total_at_risk_usd": round(total_at_risk, 2),
             "closed_pnl_usd": round(closed_pnl, 4),
+            "closed_pnl_with_simulated_fill_usd": round(closed_pnl_filled, 4),
+            "pnl_note": "closed_pnl_usd includes legacy paper trades without simulated fills; use closed_pnl_with_simulated_fill_usd for cleaner post-fill accounting",
         },
         "trades": trades,
     }
@@ -373,11 +503,99 @@ def cmd_paper_report() -> None:
     print(f"Saved report: {report_path}")
 
 
+def cmd_calibration_snapshot() -> None:
+    """Write a calibration snapshot for model validation.
+
+    Collects per-candidate metrics (bucket width, sigma, model prob, verdict)
+    and aggregate stats used to validate sigma calibration and gate logic.
+    This runs on every paper-cycle so we accumulate empirical data even when
+    paper opening is disabled.
+    """
+    from .parsing import bucket_probability
+
+    settings = get_settings()
+    candidates, skipped = _generate_candidates(settings)
+    sigma_eff = _effective_sigma_observed()
+
+    records = []
+    narrow_rejects = []
+    for c in candidates:
+        d = c.as_dict()
+        records.append({
+            "market_id": d["market_id"],
+            "slug": d["slug"],
+            "verdict": d["verdict"],
+            "score": d["score"],
+            "bucket_width_c": d.get("bucket_width_c"),
+            "sigma_c": d["sigma_c"],
+            "model_prob": d["model_prob"],
+            "executable_ev": d["executable_ev"],
+            "confidence": d["confidence"],
+            "observed_metar_count": d["observed_metar_count"],
+            "observed_authority": d["observed_authority"],
+            "resolution_location": d["resolution_location"],
+            "horizon_hours": d["horizon_hours"],
+            "liquidity": d["liquidity"],
+            "reason": d["reason"],
+        })
+        if d["verdict"] == "REJECT" and "exact/narrow temperature bucket" in d.get("reason", ""):
+            narrow_rejects.append(d["market_id"])
+
+    # Aggregate stats by bucket-width bins
+    def _bin_width(w):
+        if w is None:
+            return "unknown"
+        if w <= 1.01:
+            return "narrow_<=1.01"
+        if w <= 2.0:
+            return "medium_1.01_2.0"
+        return "wide_>2.0"
+
+    by_width = {}
+    for r in records:
+        b = _bin_width(r["bucket_width_c"])
+        by_width.setdefault(b, {"count": 0, "pass": 0, "paper": 0, "reject": 0, "avg_score": 0.0, "avg_model_prob": 0.0})
+        by_width[b]["count"] += 1
+        by_width[b][r["verdict"].lower()] += 1
+        by_width[b]["avg_score"] += r["score"] or 0.0
+        by_width[b]["avg_model_prob"] += r["model_prob"] or 0.0
+
+    for b in by_width:
+        n = by_width[b]["count"]
+        by_width[b]["avg_score"] = round(by_width[b]["avg_score"] / n, 3) if n else 0.0
+        by_width[b]["avg_model_prob"] = round(by_width[b]["avg_model_prob"] / n, 4) if n else 0.0
+
+    report = {
+        "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "sigma_eff_observed": round(sigma_eff, 4),
+        "total_scanned": len(records),
+        "skipped": len(skipped),
+        "verdict_counts": {
+            "pass": sum(1 for r in records if r["verdict"] == "PASS"),
+            "paper": sum(1 for r in records if r["verdict"] == "PAPER"),
+            "reject": sum(1 for r in records if r["verdict"] == "REJECT"),
+        },
+        "narrow_bucket_hard_rejects": len(narrow_rejects),
+        "by_bucket_width": by_width,
+        "top_5_pass": [r for r in records if r["verdict"] == "PASS"][:5],
+        "top_5_paper": [r for r in records if r["verdict"] == "PAPER"][:5],
+    }
+    report_path = settings.project_root / "reports" / "calibration_snapshot.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(f"Calibration snapshot saved: {report_path}")
+
+
 def cmd_paper_cycle() -> None:
-    # Conservative unattended loop: refresh candidates, open a few PASS-only paper
-    # positions, settle irreversible/open positions, then write the current report.
+    # Conservative unattended loop: refresh candidates, optionally open a few
+    # PASS-only paper positions, settle irreversible/open positions, then write
+    # the current report. Opening can be paused while source/model reliability is
+    # under investigation without stopping settlement/reporting.
     cmd_verify_candidates()
-    cmd_paper_open(limit=5, size_usd=1.0, include_paper=False)
+    cmd_calibration_snapshot()
+    if os.environ.get("WEATHER_EDGE_DISABLE_PAPER_OPEN") == "1":
+        print("Paper opening disabled by WEATHER_EDGE_DISABLE_PAPER_OPEN=1")
+    else:
+        cmd_paper_open(limit=5, size_usd=1.0, include_paper=False)
     cmd_paper_settle()
     cmd_paper_report()
 
@@ -401,6 +619,7 @@ def build_parser() -> argparse.ArgumentParser:
     paper_open.add_argument("--include-paper", action="store_true")
     sub.add_parser("paper-report")
     sub.add_parser("paper-settle")
+    sub.add_parser("reconcile-sources")
     sub.add_parser("paper-cycle")
     sub.add_parser("run-once")
     return parser
@@ -423,6 +642,8 @@ def main() -> None:
         cmd_paper_report()
     elif args.command == "paper-settle":
         cmd_paper_settle()
+    elif args.command == "reconcile-sources":
+        cmd_reconcile_sources()
     elif args.command == "paper-cycle":
         cmd_paper_cycle()
     elif args.command == "run-once":

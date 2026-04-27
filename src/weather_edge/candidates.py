@@ -38,6 +38,8 @@ class Candidate:
     horizon_hours: float
     resolution_location: str | None
     observed_metar_count: int
+    observed_authority: str | None
+    bucket_width_c: float | None
     resolution_source: str | None
 
     def as_dict(self) -> dict[str, Any]:
@@ -72,6 +74,8 @@ class Candidate:
             "horizon_hours": round(self.horizon_hours, 2),
             "resolution_location": self.resolution_location,
             "observed_metar_count": self.observed_metar_count,
+            "observed_authority": self.observed_authority,
+            "bucket_width_c": round(self.bucket_width_c, 3) if self.bucket_width_c is not None else None,
             "resolution_source": self.resolution_source,
         }
 
@@ -88,7 +92,13 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     context = forecast_meta.get("context") or {}
     resolution_location = context.get("resolution_location")
     observed_count = int(context.get("observed_metar_count") or 0)
+    observed_authority = context.get("observed_authority")
     resolution_source = market.raw.get("resolutionSource") or market.raw.get("resolution_source")
+    lower = context.get("bucket_lower_c")
+    upper = context.get("bucket_upper_c")
+    bucket_width_c = None
+    if isinstance(lower, (int, float)) and isinstance(upper, (int, float)):
+        bucket_width_c = float(upper) - float(lower)
 
     blockers: list[str] = []
     cautions: list[str] = []
@@ -108,13 +118,19 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         blockers.append("low liquidity")
     if result.confidence != "high":
         cautions.append("model confidence not high")
+    if result.horizon_hours <= 0 and observed_authority in {"weathercom_wunderground", "metar"}:
+        cautions.append("same-day/provisional observation, wait for final Gamma or completed source day")
+    if bucket_width_c is not None and bucket_width_c <= 1.01:
+        blockers.append("exact/narrow temperature bucket requires calibration before PASS")
     if resolution_location and isinstance(resolution_location, str) and len(resolution_location) == 4:
         if observed_count < 6 and result.horizon_hours <= 24:
-            cautions.append("few/no same-day METAR observations")
+            cautions.append("few/no same-day official observations")
     else:
         cautions.append("no ICAO station lock")
     if not resolution_source:
         cautions.append("missing resolution source")
+    elif ("wunderground.com" in str(resolution_source).lower() or "weather.com" in str(resolution_source).lower()) and observed_authority != "weathercom_wunderground":
+        blockers.append("official Wunderground/weather.com source unavailable")
 
     exec_ev = top.executable_ev if top else None
     ask = top.best_ask if top else None
@@ -185,5 +201,7 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         horizon_hours=result.horizon_hours,
         resolution_location=resolution_location,
         observed_metar_count=observed_count,
+        observed_authority=str(observed_authority) if observed_authority else None,
+        bucket_width_c=bucket_width_c,
         resolution_source=str(resolution_source) if resolution_source else None,
     )

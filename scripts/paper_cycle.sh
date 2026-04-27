@@ -36,7 +36,7 @@ PY
     gzip -f "logs/paper_cycle-${TODAY}.log"
   fi
   set +e
-  flock -n "$LOCK_FILE" bash -c 'PYTHONPATH=src WEATHER_EDGE_MARKET_SCAN_PAGES=76 WEATHER_EDGE_REPORT_LIMIT=10 WEATHER_EDGE_MAX_OPEN_POSITIONS=25 python3 -m weather_edge.main paper-cycle'
+  flock -n "$LOCK_FILE" bash -c 'PYTHONPATH=src WEATHER_EDGE_MARKET_SCAN_PAGES=76 WEATHER_EDGE_REPORT_LIMIT=10 WEATHER_EDGE_MAX_OPEN_POSITIONS=5 python3 -m weather_edge.main paper-cycle'
   code=$?
   set -e
   if [ "$code" -ne 0 ]; then

@@ -8,6 +8,7 @@ from typing import Any
 from .clients.aviationweather import observed_extreme_c
 from .clients.weathercom import official_extreme_c
 from .parsing import TemperatureContract, parse_temperature_contract
+from .timezones import timezone_hint_for_icao
 
 
 @dataclass(frozen=True)
@@ -50,25 +51,7 @@ def settle_candidate(candidate: dict[str, Any], question: str, side: str) -> Set
     icao = _icao_from_candidate(candidate)
     if not icao:
         return SettlementResult(False, None, None, "no ICAO station lock")
-    timezone_name = str(candidate.get("timezone") or "UTC")
-    # candidate JSON currently does not expose timezone at top-level; infer common UTC fallback is safe
-    # for same-day METAR filtering only when target date is already local in market wording.
-    if icao.startswith("RK"):
-        timezone_name = "Asia/Seoul"
-    elif icao.startswith("EG"):
-        timezone_name = "Europe/London"
-    elif icao.startswith("LF"):
-        timezone_name = "Europe/Paris"
-    elif icao == "KORD":
-        timezone_name = "America/Chicago"
-    elif icao.startswith("K"):
-        timezone_name = "America/New_York"
-    elif icao.startswith("CY"):
-        timezone_name = "America/Toronto"
-    elif icao.startswith("SA"):
-        timezone_name = "America/Argentina/Buenos_Aires"
-    elif icao.startswith("SB"):
-        timezone_name = "America/Sao_Paulo"
+    timezone_name = str(candidate.get("timezone") or timezone_hint_for_icao(icao))
 
     day_complete = datetime.now(timezone.utc) > contract.target_date.replace(hour=23, minute=59)
     resolution_source = str(candidate.get("resolution_source") or "")
