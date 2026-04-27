@@ -105,6 +105,26 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     UNIQUE(market_id, side, opened_at)
 );
 
+CREATE TABLE IF NOT EXISTS backtest_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    city TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    target_date TEXT NOT NULL,
+    reference_date TEXT NOT NULL,
+    horizon_hours REAL NOT NULL,
+    forecast_max_c REAL NOT NULL,
+    observed_max_c REAL NOT NULL,
+    residual_c REAL NOT NULL,
+    metric TEXT NOT NULL,
+    model_source TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_backtest_city ON backtest_records(city);
+CREATE INDEX IF NOT EXISTS idx_backtest_horizon ON backtest_records(horizon_hours);
+CREATE INDEX IF NOT EXISTS idx_backtest_target_date ON backtest_records(target_date);
+
 CREATE INDEX IF NOT EXISTS idx_scans_market_created ON scans(market_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_forecasts_market_created ON forecasts(market_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades(status, opened_at DESC);
@@ -313,6 +333,57 @@ def close_paper_trade(
         """,
         (exit_price, pnl_usd, notes, datetime.now(dt_timezone.utc).isoformat(), trade_id),
     )
+
+
+def insert_backtest_record(conn: sqlite3.Connection, record) -> int:
+    """Insert a BacktestRecord into the backtest_records table."""
+    cur = conn.execute(
+        """
+        INSERT INTO backtest_records(
+            city, latitude, longitude, target_date, reference_date,
+            horizon_hours, forecast_max_c, observed_max_c, residual_c,
+            metric, model_source, fetched_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            record.city,
+            record.latitude,
+            record.longitude,
+            record.target_date,
+            record.reference_date,
+            record.horizon_hours,
+            record.forecast_max_c,
+            record.observed_max_c,
+            record.residual_c,
+            record.metric,
+            record.model_source,
+            record.fetched_at,
+            datetime.now(dt_timezone.utc).isoformat(),
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def list_backtest_records(
+    conn: sqlite3.Connection,
+    city: str | None = None,
+    horizon_min: float | None = None,
+    horizon_max: float | None = None,
+) -> list[sqlite3.Row]:
+    clauses: list[str] = []
+    params: list[object] = []
+    if city is not None:
+        clauses.append("city = ?")
+        params.append(city)
+    if horizon_min is not None:
+        clauses.append("horizon_hours >= ?")
+        params.append(horizon_min)
+    if horizon_max is not None:
+        clauses.append("horizon_hours <= ?")
+        params.append(horizon_max)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    sql = f"SELECT * FROM backtest_records{where} ORDER BY target_date DESC, horizon_hours ASC"
+    return list(conn.execute(sql, params))
 
 
 def insert_scan(conn: sqlite3.Connection, scan: ScanResult) -> None:

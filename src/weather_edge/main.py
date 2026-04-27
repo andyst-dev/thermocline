@@ -5,14 +5,24 @@ import json
 import os
 from pathlib import Path
 
+from datetime import date, timedelta
+
 from .audit import write_json_gz
+from .backtest import (
+    DEFAULT_HORIZONS,
+    HORIZON_BUCKETS,
+    aggregate_sigma,
+    run_backtest_for_city,
+    write_backtest_report,
+)
 from .candidates import build_candidate, compute_kelly_size
 from .clients.aviationweather import observed_extreme_c
 from .clients.clob import simulate_buy_fill
+from .clients.openmeteo import geocode_city
 from .clients.polymarket import fetch_market_by_id, fetch_weather_markets
 from .clients.weathercom import icao_from_wunderground_source, official_extreme_c
 from .config import get_settings
-from .db import close_paper_trade, connect, init_db, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
+from .db import close_paper_trade, connect, init_db, insert_backtest_record, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
 from .parsing import parse_temperature_contract
 from .scanner import ScanSkip, filter_markets, scan_market, _effective_sigma_observed
 from .settlement import settle_candidate
@@ -637,6 +647,100 @@ def cmd_paper_cycle() -> None:
     cmd_paper_report()
 
 
+DEFAULT_BACKTEST_CITIES = [
+    "New York",
+    "London",
+    "Tokyo",
+    "Seoul",
+    "Sao Paulo",
+    "Mexico City",
+    "Buenos Aires",
+    "Dallas",
+    "Miami",
+    "Moscow",
+    "Wellington",
+]
+
+
+def cmd_backtest(
+    cities: list[str] | None,
+    start_date: str,
+    end_date: str,
+    horizons: list[int] | None = None,
+    metric: str = "highest",
+) -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    horizons = horizons or list(DEFAULT_HORIZONS)
+    cities = cities or list(DEFAULT_BACKTEST_CITIES)
+
+    try:
+        start_dt = date.fromisoformat(start_date)
+    except ValueError as exc:
+        raise SystemExit(f"Invalid --start-date: {exc}") from exc
+    today = date.today()
+    if (today - start_dt) > timedelta(days=90):
+        print(
+            f"WARNING: start-date {start_date} is more than ~3 months back; "
+            "Open-Meteo previous-runs API has limited depth and may return no data.",
+            flush=True,
+        )
+
+    all_records = []
+    per_city_counts: dict[str, int] = {}
+    for city in cities:
+        try:
+            geo = geocode_city(settings, city)
+        except Exception as exc:
+            print(f"WARNING: geocoding failed for {city}: {exc}", flush=True)
+            continue
+        if not geo:
+            print(f"WARNING: no geocode result for {city}", flush=True)
+            continue
+        latitude = float(geo["latitude"])
+        longitude = float(geo["longitude"])
+        timezone_name = str(geo.get("timezone") or "auto")
+        print(f"Backtesting {city} ({latitude:.3f},{longitude:.3f}) {start_date}..{end_date}", flush=True)
+        records = run_backtest_for_city(
+            settings,
+            city=city,
+            latitude=latitude,
+            longitude=longitude,
+            timezone=timezone_name,
+            start_date=start_date,
+            end_date=end_date,
+            metric=metric,
+            horizons=horizons,
+        )
+        per_city_counts[city] = len(records)
+        all_records.extend(records)
+
+    aggregates = aggregate_sigma(all_records)
+
+    with connect(settings.db_path) as conn:
+        for record in all_records:
+            insert_backtest_record(conn, record)
+
+    json_path, md_path = write_backtest_report(settings.project_root, all_records, aggregates)
+
+    print("")
+    print(f"Total records: {aggregates['total_records']}")
+    print("Per-city counts:")
+    for city, count in per_city_counts.items():
+        print(f"  {city}: {count}")
+    print("")
+    print("Empirical sigma by horizon bucket:")
+    for label, _, _ in HORIZON_BUCKETS:
+        stats = aggregates["by_horizon"][label]
+        print(
+            f"  {label}: count={stats['count']} sigma={stats['sigma_c']} "
+            f"mean={stats['mean_residual_c']} mae={stats['median_abs_error_c']}"
+        )
+    print("")
+    print(f"Saved report: {json_path}")
+    print(f"Saved report: {md_path}")
+
+
 def cmd_run_once() -> None:
     cmd_init_db()
     cmd_fetch_markets()
@@ -659,6 +763,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("reconcile-sources")
     sub.add_parser("paper-cycle")
     sub.add_parser("run-once")
+    backtest = sub.add_parser("backtest")
+    backtest.add_argument("--cities", type=str, default=None, help="Comma-separated city list")
+    backtest.add_argument("--start-date", type=str, required=True, help="YYYY-MM-DD")
+    backtest.add_argument("--end-date", type=str, required=True, help="YYYY-MM-DD")
+    backtest.add_argument("--horizons", type=str, default="24,48,72,96,120", help="Comma-separated hours")
+    backtest.add_argument("--metric", type=str, default="highest", choices=["highest", "lowest"])
     return parser
 
 
@@ -685,6 +795,16 @@ def main() -> None:
         cmd_paper_cycle()
     elif args.command == "run-once":
         cmd_run_once()
+    elif args.command == "backtest":
+        cities = [c.strip() for c in args.cities.split(",") if c.strip()] if args.cities else None
+        horizons = [int(h.strip()) for h in args.horizons.split(",") if h.strip()] if args.horizons else None
+        cmd_backtest(
+            cities=cities,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            horizons=horizons,
+            metric=args.metric,
+        )
     else:
         parser.error(f"Unknown command: {args.command}")
 
