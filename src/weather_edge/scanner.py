@@ -11,6 +11,7 @@ from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
 from .clients.weathercom import official_extreme_c
 from .config import Settings
+from .ensemble import ensemble_bucket_probability, fetch_gfs_ensemble
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
 from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_metric_city_and_date, parse_temperature_contract
 
@@ -139,10 +140,21 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
     forecast_max_c = _forecast_daily_extreme(forecast, context.target_date, metric)
     sigma_c, horizon_hours = _sigma_for_horizon(context.target_date)
 
+    # Fetch GFS ensemble for mid-to-long horizons where Gaussian sigma is regime-blind
+    ensemble = None
+    if horizon_hours > 36:
+        ensemble = fetch_gfs_ensemble(context.latitude, context.longitude, context.target_date.date(), temperature_unit="celsius")
+
     buckets: list[BucketProbability] = []
     for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
         lower, upper = parse_bucket(label)
-        model_prob = _cap_model_prob(bucket_probability(lower, upper, forecast_max_c, sigma_c))
+        model_prob_gaussian = _cap_model_prob(bucket_probability(lower, upper, forecast_max_c, sigma_c))
+        model_prob = model_prob_gaussian
+        model_prob_ensemble = None
+        if ensemble:
+            member_values = ensemble["member_maxs"] if metric == "highest" else ensemble["member_mins"]
+            model_prob_ensemble = ensemble_bucket_probability(member_values, lower, upper)
+            model_prob = model_prob_ensemble
         edge = model_prob - market_prob
         ev = (model_prob * 1.0) - market_prob
         buckets.append(
@@ -154,6 +166,8 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
                 model_prob=model_prob,
                 edge=edge,
                 ev=ev,
+                model_prob_gaussian=model_prob_gaussian,
+                model_prob_ensemble=model_prob_ensemble,
             )
         )
 
@@ -165,6 +179,11 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
         confidence = "medium"
     if sigma_c <= 2.0 and horizon_hours <= 36:
         confidence = "high"
+    # Ensemble can upgrade confidence if spread is tight even at longer horizons
+    if ensemble and ensemble.get("spread_max", 999) < 1.5 and horizon_hours <= 72:
+        confidence = "high"
+    elif ensemble and ensemble.get("spread_max", 999) < 2.0 and horizon_hours <= 96:
+        confidence = "medium"
 
     result = ScanResult(
         market_id=market.market_id,
@@ -218,6 +237,12 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     forecast = fetch_hourly_forecast(settings, float(geo["latitude"]), float(geo["longitude"]), timezone_name)
     forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
     sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date)
+
+    # Fetch GFS ensemble for mid-to-long horizons
+    ensemble = None
+    if horizon_hours > 36:
+        ensemble = fetch_gfs_ensemble(float(geo["latitude"]), float(geo["longitude"]), contract.target_date.date(), temperature_unit="celsius")
+
     observed_count = 0
     observed_authority = None
     resolution_source = str(market.raw.get("resolutionSource") or market.raw.get("resolution_source") or "")
@@ -234,7 +259,14 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
         if observed_value is not None:
             forecast_value_c = observed_value
             sigma_c = _effective_sigma_observed()
-    bucket_prob = _cap_model_prob(bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c))
+    model_prob_gaussian = _cap_model_prob(bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c))
+    model_prob = model_prob_gaussian
+    model_prob_ensemble = None
+    if ensemble:
+        member_values = ensemble["member_maxs"] if contract.metric == "highest" else ensemble["member_mins"]
+        model_prob_ensemble = ensemble_bucket_probability(member_values, contract.lower_c, contract.upper_c)
+        model_prob = model_prob_ensemble
+    bucket_prob = model_prob
 
     buckets: list[BucketProbability] = []
     for label, market_prob in zip(market.outcomes, market.outcome_prices, strict=False):
@@ -248,6 +280,8 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
                 model_prob=model_prob,
                 edge=model_prob - market_prob,
                 ev=model_prob - market_prob,
+                model_prob_gaussian=model_prob_gaussian if label.lower() == "yes" else 1.0 - model_prob_gaussian,
+                model_prob_ensemble=model_prob_ensemble if label.lower() == "yes" else (1.0 - model_prob_ensemble if model_prob_ensemble is not None else None),
             )
         )
 
@@ -259,6 +293,11 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
         confidence = "medium"
     if sigma_c <= 2.0 and horizon_hours <= 36:
         confidence = "high"
+    # Ensemble confidence upgrade
+    if ensemble and ensemble.get("spread_max", 999) < 1.5 and horizon_hours <= 72:
+        confidence = "high"
+    elif ensemble and ensemble.get("spread_max", 999) < 2.0 and horizon_hours <= 96:
+        confidence = "medium"
     result = ScanResult(
         market_id=market.market_id,
         slug=market.slug,

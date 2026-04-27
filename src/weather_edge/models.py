@@ -51,6 +51,8 @@ class BucketProbability:
     book_snapshot_path: str | None = None
     book_snapshot_hash: str | None = None
     token_id: str | None = None
+    model_prob_gaussian: float | None = None  # original Gaussian estimate
+    model_prob_ensemble: float | None = None  # GFS ensemble fraction
 
 
 @dataclass

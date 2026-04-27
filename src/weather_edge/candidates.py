@@ -41,6 +41,8 @@ class Candidate:
     observed_authority: str | None
     bucket_width_c: float | None
     resolution_source: str | None
+    model_prob_gaussian: float | None
+    model_prob_ensemble: float | None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +79,8 @@ class Candidate:
             "observed_authority": self.observed_authority,
             "bucket_width_c": round(self.bucket_width_c, 3) if self.bucket_width_c is not None else None,
             "resolution_source": self.resolution_source,
+            "model_prob_gaussian": round(self.model_prob_gaussian, 4) if self.model_prob_gaussian is not None else None,
+            "model_prob_ensemble": round(self.model_prob_ensemble, 4) if self.model_prob_ensemble is not None else None,
         }
 
 
@@ -135,6 +139,8 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     exec_ev = top.executable_ev if top else None
     ask = top.best_ask if top else None
     model_prob = top.model_prob if top else None
+    model_prob_gaussian = top.model_prob_gaussian if top else None
+    model_prob_ensemble = top.model_prob_ensemble if top else None
     gamma_price = top.market_prob if top else None
     ask_capacity = top.ask_capacity_usd if top else None
     fill_avg_price = top.fill_avg_price if top else None
@@ -204,4 +210,6 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         observed_authority=str(observed_authority) if observed_authority else None,
         bucket_width_c=bucket_width_c,
         resolution_source=str(resolution_source) if resolution_source else None,
+        model_prob_gaussian=model_prob_gaussian,
+        model_prob_ensemble=model_prob_ensemble,
     )
