@@ -1,4 +1,4 @@
-# 🌤️ Weather Edge
+# 🌡️ Thermocline
 
 > **Systematic weather prediction market making on Polymarket.**
 >
@@ -10,7 +10,7 @@
 
 Polymarket runs hundreds of weather binary contracts daily: *"Will the high in Tokyo on May 3 exceed 22°C?"*. Prices are set by retail sentiment, not meteorology. A 24h GFS forecast is accurate to ~1.3°C. Markets often price a 3°C bucket at 10¢ when the true probability is 40¢.
 
-**Weather Edge closes that gap.**
+**Thermocline closes that gap.**
 
 ---
 
