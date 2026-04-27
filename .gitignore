@@ -2,6 +2,8 @@ data/snapshots/
 logs/*
 !logs/.gitignore
 !logs/.gitkeep
+reports/*.json
+reports/*.md
 __pycache__/
 *.pyc
 
