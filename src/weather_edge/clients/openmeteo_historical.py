@@ -26,7 +26,6 @@ def fetch_historical_forecast(
         "start_date": reference_date,
         "end_date": end_date.isoformat(),
         "models": model,
-        "forecast_days": forecast_days,
         "hourly": "temperature_2m",
         "temperature_unit": "celsius",
         "timezone": "auto",
