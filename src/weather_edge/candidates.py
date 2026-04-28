@@ -187,7 +187,7 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         blockers.append("low liquidity")
     if result.confidence != "high":
         cautions.append("model confidence not high")
-    if result.horizon_hours <= 0 and observed_authority in {"weathercom_wunderground", "metar"}:
+    if result.horizon_hours <= 0:
         blockers.append("same-day/provisional observation: local day may not be complete")
     if bucket_width_c is not None and bucket_width_c <= 1.01:
         blockers.append("exact/narrow temperature bucket requires calibration before PASS")
@@ -198,7 +198,7 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         cautions.append("no ICAO station lock")
     if not resolution_source:
         cautions.append("missing resolution source")
-    elif ("wunderground.com" in str(resolution_source).lower() or "weather.com" in str(resolution_source).lower()) and observed_authority != "weathercom_wunderground":
+    elif ("wunderground.com" in str(resolution_source).lower() or "weather.com" in str(resolution_source).lower()) and observed_authority != "weathercom_wunderground" and result.horizon_hours > 0:
         blockers.append("official Wunderground/weather.com source unavailable")
 
     exec_ev = top.executable_ev if top else None
