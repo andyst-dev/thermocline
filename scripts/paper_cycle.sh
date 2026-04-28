@@ -2,8 +2,8 @@
 set -euo pipefail
 export WEATHER_EDGE_DISABLE_PAPER_OPEN=1
 cd /home/builder/weather-edge
-mkdir -p logs reports data/backups
-LOCK_FILE=/tmp/weather_edge_paper_cycle.lock
+mkdir -p logs reports data/backups data/run
+LOCK_FILE=data/run/weather_edge_paper_cycle.lock
 HEARTBEAT=reports/paper_cycle_heartbeat.json
 DB=data/weather_edge.db
 TODAY=$(date -u +%F)
