@@ -42,12 +42,13 @@ def _parse_month_values(text: str, month: int) -> list[tuple[int, float]]:
     return values
 
 
-def global_temp_baseline(month: int, lookback_years: int = 10) -> AnomalyBaseline:
+def global_temp_baseline(month: int, lookback_years: int = 25) -> AnomalyBaseline:
     values = _parse_month_values(_fetch_table(), month)
     if not values:
         raise ValueError(f"No GISTEMP values for month={month}")
     recent = [value for _, value in values[-lookback_years:]]
-    sigma = pstdev(recent) if len(recent) > 1 else 0.08
-    # Avoid fake overconfidence: GISTEMP monthly anomaly moves a lot year-to-year.
-    sigma = max(0.06, sigma)
+    sigma = pstdev(recent) if len(recent) > 1 else 0.20
+    # Monthly global anomaly uncertainty is dominated by ENSO + unforced variability.
+    # A 10-year same-month sample underestimates true forecast uncertainty.
+    sigma = max(0.20, sigma)
     return AnomalyBaseline(target_month=month, mean_c=mean(recent), sigma_c=sigma, samples=recent)
