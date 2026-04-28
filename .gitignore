@@ -1,0 +1,27 @@
+# Data & runtime
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/snapshots/
+data/backups/
+logs/*
+archive/
+reports/*.json
+reports/*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv/
+
+# IDEs
+.vscode/
+.idea/
