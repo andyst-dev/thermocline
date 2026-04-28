@@ -99,6 +99,56 @@ python3 -m compileall -q src/
 
 ---
 
+## Sources alternatives & fallback
+
+### METAR parsing : python-metar
+- Repo : `python-metar/python-metar` (295⭐) — `pip install metar`
+- Alternative : `mivek/python-metar-taf-parser` (64⭐) — `pip install metar-taf-parser-mivek`
+- **Statut** : pas intégré actuellement. Notre `aviationweather.py` consomme l'API AviationWeather.gov en JSON (temp brute), ce qui est plus direct que parser du texte METAR.
+- **Quand l'utiliser** :
+  - Si AviationWeather.gov devient instable ou rate-limité
+  - Si on veut une source secondaire NOAA texte (`tgftp.nws.noaa.gov/data/observations/metar/stations/<ICAO>.TXT`)
+  - Si on diversifie la stratégie vers vent/pression/précip (python-metar a un data model riche)
+- **Action** : ne pas ajouter de dépendance tant que l'API JSON fonctionne. Documenté ici pour référence future.
+
+---
+
+## Notes sur les ressources externes
+
+### Tweet Alter Ego (@alterego_eth) — 28 avril 2026
+**URL** : https://x.com/alterego_eth/status/2048720881040699419
+
+**Contenu** : Analyse du profit des weather markets sur Polymarket. L'auteur identifie que les marchés météo sont inefficients car les prix ne reflètent pas correctement les probabilités réelles.
+
+**Utile pour nous** :
+- ✅ Confirmation que notre niche (weather markets) est mathématiquement exploitable
+- ✅ L'idée de l'**oracle lag** (décalage entre données METAR et résolution Wunderground) est exactement notre stratégie de scalping
+- ✅ Validation externe que les modèles gaussiens simples peuvent battre le marché si bien calibrés
+
+**Pas utile** :
+- 🔴 Pas de code, pas de méthodologie détaillée — du storytelling de trader
+- 🔴 Pas de gestion du risque (Kelly, sizing) mentionnée
+
+### Thread AdiX (@adiix_official) — « I gave Claude the keys to my Polymarket account »
+**URL** : https://x.com/adiix_official/status/2049055937730609626
+
+**Contenu** : Guide viral pour construire un bot Polymarket avec Claude. 26,880$ de profit en 14 jours sur 120$ de capital. Liste de 13 GitHub repos.
+
+**Utile pour nous** :
+- ✅ Insistance sur le **kill switch** et le mode **read-only first** — aligné avec notre `DISABLE_PAPER_OPEN=1`
+- ✅ Confirmation que l'API Polymarket (`py-clob-client`) est mature et permissionless
+- ✅ Rappel utile : tester avec du petit capital avant de scaler
+
+**Pas utile / dangereux** :
+- 🔴 **Survivorship bias massif** — montre le run gagnant, pas les pertes
+- 🔴 Approche « donne les clés à Claude » = LLM qui improvise. Nous on veut des règles fixes (EV, Kelly, gates)
+- 🔴 Les « 13 GitHub » sont des templates généralistes (py-clob-client, poly-market-maker, agents) — **rien de spécifique météo**
+- 🔴 Risque sécurité : beaucoup de repos « gratuits » Polymarket sont des hijacks qui volent les clés API (cf. article Step Security)
+
+**Verdict** : le thread est du **marketing viral**, pas de la science. Notre approche (sigma calibré, EV mathématique, Kelly 1/4) est plus rigoureuse.
+
+---
+
 ## Notes
 
 - Architecture reste **local-first, provider-agnostic, vérifiable**
