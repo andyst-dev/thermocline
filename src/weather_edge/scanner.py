@@ -6,12 +6,13 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from .backtest import load_sigma_calibration, sigma_for_horizon_and_season
-from .clients.aviationweather import observed_extreme_c
+from .clients.aviationweather import observed_extreme_c, station_coords
 from .clients.clob import simulate_buy_fill
 from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
-from .clients.weathercom import official_extreme_c
+from .clients.weathercom import icao_from_wunderground_source, official_extreme_c
 from .config import Settings
+from .timezones import timezone_hint_for_icao
 from .ensemble import ensemble_bucket_probability, fetch_gfs_ensemble
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
 from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_metric_city_and_date, parse_temperature_contract
@@ -111,21 +112,30 @@ def _sort_buckets(buckets: list[BucketProbability]) -> None:
     buckets.sort(key=lambda x: x.executable_ev if x.executable_ev is not None else -999.0, reverse=True)
 
 
-def _extract_context(settings: Settings, market: WeatherMarket) -> MarketContext:
+def _resolve_forecast_coords(settings: Settings, location_name: str, icao: str | None) -> tuple[float, float, str]:
+    if icao:
+        coords = station_coords(icao)
+        if coords:
+            return coords["lat"], coords["lon"], timezone_hint_for_icao(icao)
+    geo = geocode_city(settings, location_name)
+    if not geo:
+        raise ScanSkip(f"geocode failed for {location_name}")
+    return float(geo["latitude"]), float(geo["longitude"]), str(geo.get("timezone") or "auto")
+
+
+def _extract_context(settings: Settings, market: WeatherMarket, icao: str | None = None) -> MarketContext:
     parsed = parse_city_and_date(market.question)
     if not parsed:
         raise ScanSkip("question pattern unsupported")
     city, target_date = parsed
-    geo = geocode_city(settings, city)
-    if not geo:
-        raise ScanSkip(f"geocode failed for {city}")
+    lat, lon, tz = _resolve_forecast_coords(settings, city, icao)
     return MarketContext(
         market=market,
         city=city,
         target_date=target_date,
-        latitude=float(geo["latitude"]),
-        longitude=float(geo["longitude"]),
-        timezone=str(geo.get("timezone") or "auto"),
+        latitude=lat,
+        longitude=lon,
+        timezone=tz,
     )
 
 
@@ -162,7 +172,9 @@ def _sigma_for_horizon(target_date: datetime, settings: Settings | None = None) 
 
 
 def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
-    context = _extract_context(settings, market)
+    resolution_source = str(market.raw.get("resolutionSource") or "")
+    icao = icao_from_wunderground_source(resolution_source)
+    context = _extract_context(settings, market, icao)
     parsed_metric = parse_metric_city_and_date(market.question)
     metric = parsed_metric[0] if parsed_metric else "highest"
     forecast = fetch_hourly_forecast(settings, context.latitude, context.longitude, context.timezone)
@@ -259,18 +271,16 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     if not contract:
         raise ScanSkip("question pattern unsupported")
     resolution_location = _resolution_location(market, contract.city)
-    geo = geocode_city(settings, resolution_location)
-    if not geo:
-        raise ScanSkip(f"geocode failed for {resolution_location}")
-    timezone_name = str(geo.get("timezone") or "auto")
-    forecast = fetch_hourly_forecast(settings, float(geo["latitude"]), float(geo["longitude"]), timezone_name)
+    _icao_for_resolution = resolution_location if re.fullmatch(r"[A-Z]{4}", resolution_location) else None
+    _lat, _lon, timezone_name = _resolve_forecast_coords(settings, resolution_location, _icao_for_resolution)
+    forecast = fetch_hourly_forecast(settings, _lat, _lon, timezone_name)
     forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
     sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date, settings)
 
     # Fetch GFS ensemble for mid-to-long horizons
     ensemble = None
     if horizon_hours > 36:
-        ensemble = fetch_gfs_ensemble(float(geo["latitude"]), float(geo["longitude"]), contract.target_date.date(), temperature_unit="celsius")
+        ensemble = fetch_gfs_ensemble(_lat, _lon, contract.target_date.date(), temperature_unit="celsius")
 
     observed_count = 0
     observed_authority = None
@@ -376,8 +386,8 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     )
     _context_meta: dict = {
         "city": contract.city,
-        "latitude": float(geo["latitude"]),
-        "longitude": float(geo["longitude"]),
+        "latitude": _lat,
+        "longitude": _lon,
         "timezone": timezone_name,
         "metric": contract.metric,
         "resolution_location": resolution_location,

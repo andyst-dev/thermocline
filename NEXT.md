@@ -8,6 +8,7 @@
 - **Timezone mapping** : `timezones.py` centralisé pour ICAO → timezone
 - **PnL accounting** : distinction trades legacy (sans fill simulé) vs trades propres
 - **Fix critique appliqué (2026-04-28)** : `_local_day_complete()` + blocage observation partielle
+- **Fix coordonnées aéroport (2026-04-28)** : le forecast Open-Meteo utilise désormais les lat/lon de la station ICAO de résolution (via AviationWeather METAR API) au lieu du centre-ville. Impact potentiel : 1-3°C de correction sur les buckets étroits.
 
 ### Paper trading
 - Trades fermés : **42**

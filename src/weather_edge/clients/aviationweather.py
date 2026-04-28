@@ -45,3 +45,27 @@ def observed_extreme_c(icao: str, target_date: datetime, timezone_name: str, met
     if not temps:
         return None, 0
     return (min(temps) if metric == "lowest" else max(temps)), len(temps)
+
+
+_STATION_COORDS_CACHE: dict[str, dict | None] = {}
+
+
+def station_coords(icao: str) -> dict | None:
+    """Fetch lat/lon for an ICAO station from AviationWeather METAR API.
+
+    The METAR endpoint returns station metadata (including lat/lon) alongside
+    observations. Returns {"lat": float, "lon": float} or None if not found.
+    """
+    icao = icao.upper()
+    if icao in _STATION_COORDS_CACHE:
+        return _STATION_COORDS_CACHE[icao]
+    try:
+        rows = fetch_metars(icao, hours=1)
+        if isinstance(rows, list) and rows:
+            result = {"lat": float(rows[0]["lat"]), "lon": float(rows[0]["lon"])}
+            _STATION_COORDS_CACHE[icao] = result
+            return result
+    except Exception:
+        pass
+    _STATION_COORDS_CACHE[icao] = None
+    return None
