@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /root/.openclaw/workspace/projects/weather-edge
+export WEATHER_EDGE_DISABLE_PAPER_OPEN=1
+cd /home/builder/weather-edge
 mkdir -p logs reports data/backups
 LOCK_FILE=/tmp/weather_edge_paper_cycle.lock
 HEARTBEAT=reports/paper_cycle_heartbeat.json
@@ -36,7 +37,7 @@ PY
     gzip -f "logs/paper_cycle-${TODAY}.log"
   fi
   set +e
-  flock -n "$LOCK_FILE" bash -c 'PYTHONPATH=src WEATHER_EDGE_MARKET_SCAN_PAGES=76 WEATHER_EDGE_REPORT_LIMIT=10 WEATHER_EDGE_MAX_OPEN_POSITIONS=5 python3 -m weather_edge.main paper-cycle'
+  flock -n "$LOCK_FILE" bash -c 'PYTHONPATH=src WEATHER_EDGE_DISABLE_PAPER_OPEN=1 WEATHER_EDGE_MARKET_SCAN_PAGES=76 WEATHER_EDGE_REPORT_LIMIT=10 WEATHER_EDGE_MAX_OPEN_POSITIONS=5 python3 -m weather_edge.main paper-cycle'
   code=$?
   set -e
   if [ "$code" -ne 0 ]; then
@@ -52,11 +53,6 @@ Path("$HEARTBEAT").write_text(json.dumps({
 }, indent=2))
 PY
     exit "$code"
-  fi
-  # Daily sigma recalibration at 06:00 UTC
-  HOUR=$(date -u +%H)
-  if [ "$HOUR" = "06" ]; then
-    PYTHONPATH=src python3 -m weather_edge.main recalibrate-sigma --lookback-days 60 >> logs/paper_cycle.log 2>&1 || true
   fi
   python3 - <<PY
 import json

@@ -3,15 +3,16 @@ from __future__ import annotations
 import json
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .backtest import load_sigma_calibration, sigma_for_horizon_and_season
-from .clients.aviationweather import observed_extreme_c
+from .clients.aviationweather import observed_extreme_c, station_coords
 from .clients.clob import simulate_buy_fill
 from .clients.nasa_gistemp import global_temp_baseline
 from .clients.openmeteo import fetch_hourly_forecast, geocode_city
-from .clients.weathercom import official_extreme_c
+from .clients.weathercom import icao_from_wunderground_source, official_extreme_c
 from .config import Settings
+from .timezones import timezone_hint_for_icao
 from .ensemble import ensemble_bucket_probability, fetch_gfs_ensemble
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
 from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_metric_city_and_date, parse_temperature_contract
@@ -44,12 +45,32 @@ def _effective_sigma_observed(
     and resolution-method rounding into a single standard deviation
     via quadratic sum (assuming independent errors).
 
-    With current defaults: sqrt(0.30² + 0.72² + 0.25²) ≈ 0.82 °C.
-    This replaces the previous hard-coded 0.3 °C which ignored two
-    major error components and led to over-confident probabilities
-    on narrow temperature buckets.
+    With current defaults: sqrt(0.30² + 0.50² + 0.25²) ≈ 0.63 °C.
+    Only valid when the local calendar day is complete and the station
+    observation is the true daily extreme. Do not use for partial-day readings.
     """
     return math.sqrt(sigma_station ** 2 + sigma_divergence ** 2 + sigma_rounding ** 2)
+
+
+def _local_day_complete(target_date: datetime, timezone_name: str, buffer_hours: float = 2.0) -> bool:
+    """True when less than buffer_hours remain in the local calendar day."""
+    try:
+        try:
+            import zoneinfo
+            tz = zoneinfo.ZoneInfo(timezone_name)
+        except Exception:
+            import pytz
+            tz = pytz.timezone(timezone_name)
+    except Exception:
+        import warnings
+        warnings.warn(f"_local_day_complete: timezone {timezone_name!r} could not be resolved; treating day as incomplete", stacklevel=2)
+        return False
+    local_end = (
+        datetime(target_date.year, target_date.month, target_date.day, tzinfo=tz)
+        + timedelta(days=1)
+        - timedelta(hours=buffer_hours)
+    )
+    return datetime.now(tz) >= local_end
 
 
 def _cap_model_prob(prob: float) -> float:
@@ -91,21 +112,30 @@ def _sort_buckets(buckets: list[BucketProbability]) -> None:
     buckets.sort(key=lambda x: x.executable_ev if x.executable_ev is not None else -999.0, reverse=True)
 
 
-def _extract_context(settings: Settings, market: WeatherMarket) -> MarketContext:
+def _resolve_forecast_coords(settings: Settings, location_name: str, icao: str | None) -> tuple[float, float, str]:
+    if icao:
+        coords = station_coords(icao)
+        if coords:
+            return coords["lat"], coords["lon"], timezone_hint_for_icao(icao)
+    geo = geocode_city(settings, location_name)
+    if not geo:
+        raise ScanSkip(f"geocode failed for {location_name}")
+    return float(geo["latitude"]), float(geo["longitude"]), str(geo.get("timezone") or "auto")
+
+
+def _extract_context(settings: Settings, market: WeatherMarket, icao: str | None = None) -> MarketContext:
     parsed = parse_city_and_date(market.question)
     if not parsed:
         raise ScanSkip("question pattern unsupported")
     city, target_date = parsed
-    geo = geocode_city(settings, city)
-    if not geo:
-        raise ScanSkip(f"geocode failed for {city}")
+    lat, lon, tz = _resolve_forecast_coords(settings, city, icao)
     return MarketContext(
         market=market,
         city=city,
         target_date=target_date,
-        latitude=float(geo["latitude"]),
-        longitude=float(geo["longitude"]),
-        timezone=str(geo.get("timezone") or "auto"),
+        latitude=lat,
+        longitude=lon,
+        timezone=tz,
     )
 
 
@@ -142,7 +172,9 @@ def _sigma_for_horizon(target_date: datetime, settings: Settings | None = None) 
 
 
 def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
-    context = _extract_context(settings, market)
+    resolution_source = str(market.raw.get("resolutionSource") or "")
+    icao = icao_from_wunderground_source(resolution_source)
+    context = _extract_context(settings, market, icao)
     parsed_metric = parse_metric_city_and_date(market.question)
     metric = parsed_metric[0] if parsed_metric else "highest"
     forecast = fetch_hourly_forecast(settings, context.latitude, context.longitude, context.timezone)
@@ -239,35 +271,40 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     if not contract:
         raise ScanSkip("question pattern unsupported")
     resolution_location = _resolution_location(market, contract.city)
-    geo = geocode_city(settings, resolution_location)
-    if not geo:
-        raise ScanSkip(f"geocode failed for {resolution_location}")
-    timezone_name = str(geo.get("timezone") or "auto")
-    forecast = fetch_hourly_forecast(settings, float(geo["latitude"]), float(geo["longitude"]), timezone_name)
+    _icao_for_resolution = resolution_location if re.fullmatch(r"[A-Z]{4}", resolution_location) else None
+    _lat, _lon, timezone_name = _resolve_forecast_coords(settings, resolution_location, _icao_for_resolution)
+    forecast = fetch_hourly_forecast(settings, _lat, _lon, timezone_name)
     forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
     sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date, settings)
 
     # Fetch GFS ensemble for mid-to-long horizons
     ensemble = None
     if horizon_hours > 36:
-        ensemble = fetch_gfs_ensemble(float(geo["latitude"]), float(geo["longitude"]), contract.target_date.date(), temperature_unit="celsius")
+        ensemble = fetch_gfs_ensemble(_lat, _lon, contract.target_date.date(), temperature_unit="celsius")
 
     observed_count = 0
     observed_authority = None
+    observed_value = None
+    day_complete = False
+    _partial_obs_c = None
     resolution_source = str(market.raw.get("resolutionSource") or market.raw.get("resolution_source") or "")
     if re.fullmatch(r"[A-Z]{4}", resolution_location):
-        observed_value = None
-        if "wunderground.com" in resolution_source.lower() or "weather.com" in resolution_source.lower():
-            observed_value, observed_count, _official_note = official_extreme_c(resolution_source, contract.target_date, contract.metric)
+        day_complete = _local_day_complete(contract.target_date, timezone_name)
+        if day_complete:
+            if "wunderground.com" in resolution_source.lower() or "weather.com" in resolution_source.lower():
+                observed_value, observed_count, _official_note = official_extreme_c(resolution_source, contract.target_date, contract.metric)
+                if observed_value is not None:
+                    observed_authority = "weathercom_wunderground"
+            if observed_value is None:
+                observed_value, observed_count = observed_extreme_c(resolution_location, contract.target_date, timezone_name, contract.metric)
+                if observed_value is not None:
+                    observed_authority = "metar"
             if observed_value is not None:
-                observed_authority = "weathercom_wunderground"
-        if observed_value is None:
-            observed_value, observed_count = observed_extreme_c(resolution_location, contract.target_date, timezone_name, contract.metric)
-            if observed_value is not None:
-                observed_authority = "metar"
-        if observed_value is not None:
-            forecast_value_c = observed_value
-            sigma_c = _effective_sigma_observed()
+                forecast_value_c = observed_value
+                sigma_c = _effective_sigma_observed()
+        else:
+            # Enhancement 3: fetch partial METAR reading for gap logging only; never used as forecast
+            _partial_obs_c, _ = observed_extreme_c(resolution_location, contract.target_date, timezone_name, contract.metric)
     model_prob_gaussian = _cap_model_prob(bucket_probability(contract.lower_c, contract.upper_c, forecast_value_c, sigma_c))
     model_prob = model_prob_gaussian
     model_prob_ensemble = None
@@ -293,6 +330,31 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
                 model_prob_ensemble=model_prob_ensemble if label.lower() == "yes" else (1.0 - model_prob_ensemble if model_prob_ensemble is not None else None),
             )
         )
+
+    # Enhancement 1: near-expiry scalping — only fires when the local day is complete and
+    # the true daily extreme is known. Uses min(0.99, ...) cap instead of the normal 0.95
+    # to allow higher confidence when the outcome is observed.
+    if day_complete and observed_value is not None:
+        _mp_yes = bucket_probability(contract.lower_c, contract.upper_c, observed_value, sigma_c)
+        _capped_yes = min(0.99, _mp_yes)
+        _capped_no = min(0.99, 1.0 - _mp_yes)
+        for _b in buckets:
+            if _b.label.lower() == "yes":
+                if _mp_yes > 0.90 and _b.market_prob < 0.95:
+                    _b.strategy = "near_expiry_scalp"
+                    _b.model_prob = _capped_yes
+                    _b.model_prob_gaussian = _capped_yes
+                    _b.model_prob_ensemble = None
+                    _b.edge = _capped_yes - _b.market_prob
+                    _b.ev = _capped_yes - _b.market_prob
+            else:
+                if _mp_yes < 0.10 and _b.market_prob < 0.95:
+                    _b.strategy = "near_expiry_scalp"
+                    _b.model_prob = _capped_no
+                    _b.model_prob_gaussian = _capped_no
+                    _b.model_prob_ensemble = None
+                    _b.edge = _capped_no - _b.market_prob
+                    _b.ev = _capped_no - _b.market_prob
 
     _enrich_with_clob(settings, market, buckets)
     _sort_buckets(buckets)
@@ -322,22 +384,23 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
         top_bucket_ev=top.ev if top else None,
         confidence=confidence,
     )
-    return result, {
-        "context": {
-            "city": contract.city,
-            "latitude": float(geo["latitude"]),
-            "longitude": float(geo["longitude"]),
-            "timezone": timezone_name,
-            "metric": contract.metric,
-            "resolution_location": resolution_location,
-            "observed_metar_count": observed_count,
-            "observed_authority": observed_authority,
-            "bucket_label": contract.label,
-            "bucket_lower_c": contract.lower_c,
-            "bucket_upper_c": contract.upper_c,
-        },
-        "forecast": forecast,
+    _context_meta: dict = {
+        "city": contract.city,
+        "latitude": _lat,
+        "longitude": _lon,
+        "timezone": timezone_name,
+        "metric": contract.metric,
+        "resolution_location": resolution_location,
+        "observed_metar_count": observed_count,
+        "observed_authority": observed_authority,
+        "bucket_label": contract.label,
+        "bucket_lower_c": contract.lower_c,
+        "bucket_upper_c": contract.upper_c,
     }
+    if _partial_obs_c is not None:
+        # Enhancement 3: log gap between partial METAR and model forecast for later analysis
+        _context_meta["observation_gap_c"] = _partial_obs_c - forecast_value_c
+    return result, {"context": _context_meta, "forecast": forecast}
 
 
 def _scan_global_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:

@@ -53,6 +53,7 @@ class BucketProbability:
     token_id: str | None = None
     model_prob_gaussian: float | None = None  # original Gaussian estimate
     model_prob_ensemble: float | None = None  # GFS ensemble fraction
+    strategy: str | None = None  # e.g. "near_expiry_scalp"
 
 
 @dataclass

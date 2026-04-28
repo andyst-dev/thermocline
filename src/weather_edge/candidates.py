@@ -127,6 +127,48 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     if isinstance(lower, (int, float)) and isinstance(upper, (int, float)):
         bucket_width_c = float(upper) - float(lower)
 
+    # Enhancement 2: intra-market arbitrage — buying both sides costs < $1, guaranteeing profit
+    if len(market.outcomes) == 2 and len(market.outcome_prices) == 2 and result.liquidity >= 250:
+        _price_sum = sum(market.outcome_prices)
+        if _price_sum < 0.99:
+            _profit = 1.0 - _price_sum
+            return Candidate(
+                verdict="ARBITRAGE",
+                reason="intra-market arbitrage: yes + no = {:.3f}".format(_price_sum),
+                score=200,
+                market_id=result.market_id,
+                slug=result.slug,
+                question=result.question,
+                city=result.city,
+                target_date=result.target_date,
+                side=None,
+                model_prob=None,
+                gamma_price=_price_sum,
+                best_bid=None,
+                best_ask=_price_sum,
+                executable_ev=_profit,
+                ask_capacity_usd=None,
+                fill_avg_price=_price_sum,
+                fill_shares=None,
+                fill_cost_usd=None,
+                fill_levels_json=None,
+                book_fetched_at=None,
+                book_snapshot_path=None,
+                book_snapshot_hash=None,
+                token_id=None,
+                liquidity=result.liquidity,
+                confidence=result.confidence,
+                forecast_value_c=result.forecast_max_c,
+                sigma_c=result.sigma_c,
+                horizon_hours=result.horizon_hours,
+                resolution_location=resolution_location,
+                observed_metar_count=observed_count,
+                observed_authority=str(observed_authority) if observed_authority else None,
+                bucket_width_c=bucket_width_c,
+                resolution_source=str(resolution_source) if resolution_source else None,
+                recommended_size_usd=min(settings.max_position_size_usd, result.liquidity * 0.1) if settings is not None else 50.0,
+            )
+
     blockers: list[str] = []
     cautions: list[str] = []
     if top is None:
@@ -145,8 +187,8 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         blockers.append("low liquidity")
     if result.confidence != "high":
         cautions.append("model confidence not high")
-    if result.horizon_hours <= 0 and observed_authority in {"weathercom_wunderground", "metar"}:
-        cautions.append("same-day/provisional observation, wait for final Gamma or completed source day")
+    if result.horizon_hours <= 0:
+        blockers.append("same-day/provisional observation: local day may not be complete")
     if bucket_width_c is not None and bucket_width_c <= 1.01:
         blockers.append("exact/narrow temperature bucket requires calibration before PASS")
     if resolution_location and isinstance(resolution_location, str) and len(resolution_location) == 4:
@@ -156,7 +198,7 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         cautions.append("no ICAO station lock")
     if not resolution_source:
         cautions.append("missing resolution source")
-    elif ("wunderground.com" in str(resolution_source).lower() or "weather.com" in str(resolution_source).lower()) and observed_authority != "weathercom_wunderground":
+    elif ("wunderground.com" in str(resolution_source).lower() or "weather.com" in str(resolution_source).lower()) and observed_authority != "weathercom_wunderground" and result.horizon_hours > 0:
         blockers.append("official Wunderground/weather.com source unavailable")
 
     exec_ev = top.executable_ev if top else None

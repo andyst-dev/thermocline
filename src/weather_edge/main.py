@@ -310,6 +310,81 @@ def _gamma_official_settlement(settings, row, candidate: dict) -> dict | None:
     }
 
 
+def _maybe_record_live_backtest(conn, row, candidate: dict, result) -> None:
+    """Insert a BacktestRecord for resolved paper trades to feed sigma calibration.
+
+    Skips silently for non-temperature markets, missing observed values, or when
+    the (city, target_date, horizon) tuple is already recorded. Failures must
+    never break the settle loop.
+    """
+    try:
+        if result.observed_value_c is None:
+            return
+        is_temperature = (
+            "observed_authority" in candidate
+            or "forecast_max_c" in candidate
+            or "forecast_value_c" in candidate
+        )
+        if not is_temperature:
+            return
+        target_date = candidate.get("target_date")
+        if not isinstance(target_date, str) or len(target_date) != 10:
+            return
+        forecast_value = candidate.get("forecast_max_c")
+        if forecast_value is None:
+            forecast_value = candidate.get("forecast_value_c")
+        if forecast_value is None:
+            return
+        horizon_hours = candidate.get("horizon_hours")
+        if horizon_hours is None:
+            return
+        forecast_value = float(forecast_value)
+        horizon_hours = float(horizon_hours)
+        observed = float(result.observed_value_c)
+        city = str(candidate.get("city") or "")
+        latitude = float(candidate.get("latitude") or 0.0)
+        longitude = float(candidate.get("longitude") or 0.0)
+
+        existing = conn.execute(
+            "SELECT 1 FROM backtest_records "
+            "WHERE city = ? AND target_date = ? AND horizon_hours = ? LIMIT 1",
+            (city, target_date, horizon_hours),
+        ).fetchone()
+        if existing:
+            return
+
+        opened_at = row["opened_at"]
+        try:
+            reference_date = str(opened_at).split("T", 1)[0]
+        except Exception:
+            reference_date = target_date
+
+        metric = "highest"
+        ctx = candidate.get("context")
+        if isinstance(ctx, dict) and ctx.get("metric"):
+            metric = str(ctx["metric"])
+        elif candidate.get("metric"):
+            metric = str(candidate["metric"])
+
+        record = BacktestRecord(
+            city=city,
+            latitude=latitude,
+            longitude=longitude,
+            target_date=target_date,
+            reference_date=reference_date,
+            horizon_hours=horizon_hours,
+            forecast_max_c=forecast_value,
+            observed_max_c=observed,
+            residual_c=forecast_value - observed,
+            metric=metric,
+            model_source="live_scanner",
+            fetched_at=str(opened_at),
+        )
+        insert_backtest_record(conn, record)
+    except Exception as exc:
+        print(f"WARNING: failed to record live backtest for trade {row['id']}: {exc}", flush=True)
+
+
 def cmd_paper_settle() -> None:
     settings = get_settings()
     init_db(settings.db_path)
@@ -365,6 +440,7 @@ def cmd_paper_settle() -> None:
                 pnl_usd=pnl,
                 notes=result.notes,
             )
+            _maybe_record_live_backtest(conn, row, candidate, result)
             settled.append({
                 "id": row["id"],
                 "question": row["question"],
@@ -743,32 +819,6 @@ def cmd_backtest(
     print(f"Saved report: {md_path}")
 
 
-def cmd_recalibrate_sigma(lookback_days: int = 60) -> None:
-    settings = get_settings()
-    init_db(settings.db_path)
-    aggregates = recalibrate_sigma(settings.db_path, settings.project_root, lookback_days)
-    print(f"Sigma calibration complete (lookback={lookback_days} days)")
-    print("")
-    print("Empirical sigma by horizon bucket:")
-    for label, _, _ in HORIZON_BUCKETS:
-        stats = aggregates["by_horizon"][label]
-        print(
-            f"  {label}: count={stats['count']} sigma={stats['sigma_c']} "
-            f"mean={stats['mean_residual_c']} mae={stats['median_abs_error_c']}"
-        )
-    print("")
-    print("Empirical sigma by horizon|season:")
-    for key, stats in sorted(aggregates.get("by_horizon_season", {}).items()):
-        print(
-            f"  {key}: count={stats['count']} sigma={stats['sigma_c']} "
-            f"mean={stats['mean_residual_c']} mae={stats['median_abs_error_c']}"
-        )
-    # Also save a copy to reports for convenience
-    report_path = settings.project_root / "reports" / "sigma_calibration.json"
-    report_path.write_text(json.dumps(aggregates, indent=2), encoding="utf-8")
-    print(f"Saved report: {report_path}")
-
-
 def cmd_run_once() -> None:
     cmd_init_db()
     cmd_fetch_markets()
@@ -791,8 +841,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("reconcile-sources")
     sub.add_parser("paper-cycle")
     sub.add_parser("run-once")
-    recalibrate = sub.add_parser("recalibrate-sigma")
-    recalibrate.add_argument("--lookback-days", type=int, default=60, help="Days of backtest records to use")
     backtest = sub.add_parser("backtest")
     backtest.add_argument("--cities", type=str, default=None, help="Comma-separated city list")
     backtest.add_argument("--start-date", type=str, required=True, help="YYYY-MM-DD")
@@ -825,8 +873,6 @@ def main() -> None:
         cmd_paper_cycle()
     elif args.command == "run-once":
         cmd_run_once()
-    elif args.command == "recalibrate-sigma":
-        cmd_recalibrate_sigma(lookback_days=args.lookback_days)
     elif args.command == "backtest":
         cities = [c.strip() for c in args.cities.split(",") if c.strip()] if args.cities else None
         horizons = [int(h.strip()) for h in args.horizons.split(",") if h.strip()] if args.horizons else None
