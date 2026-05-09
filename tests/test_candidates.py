@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
 from weather_edge.candidates import Candidate, build_candidate
+from weather_edge.config import Settings
 from weather_edge.models import BucketProbability, ScanResult, WeatherMarket
 
 
@@ -28,6 +30,17 @@ def _make_market(question: str = "Will the highest temperature in Paris be 20°C
     }
     defaults.update(kwargs)
     return WeatherMarket(**defaults)
+
+
+def _make_settings() -> Settings:
+    return Settings(
+        project_root=Path("/tmp/weather-edge-test"),
+        db_path=Path("/tmp/weather-edge-test.db"),
+        kelly_fraction=0.25,
+        kelly_bankroll_usd=100.0,
+        min_position_size_usd=1.0,
+        max_position_size_usd=50.0,
+    )
 
 
 def _make_scan_result(
@@ -99,6 +112,92 @@ class TestBuildCandidate:
         assert candidate.verdict == "PASS"
         assert candidate.bucket_width_c == pytest.approx(3.0, abs=0.01)
         assert candidate.score > 0
+
+    def test_calibration_gate_blocks_pass_candidates(self):
+        """Une calibration non fiable bloque le PASS pré-trade."""
+        bucket = _make_bucket(lower=17.5, upper=20.5)
+        scan = _make_scan_result(buckets=[bucket, _make_bucket(label="No", lower=None, upper=None, model_prob=0.20, executable_ev=None, best_ask=None)])
+        meta = {"context": {"bucket_lower_c": 17.5, "bucket_upper_c": 20.5, "observed_metar_count": 6, "observed_authority": "weathercom_wunderground", "resolution_location": "KJFK"}}
+        gate = {"allowed": False, "reasons": ["Brier score too high: 0.8604 > 0.3000"]}
+
+        candidate = build_candidate(_make_market(), scan, meta, calibration_gate=gate)
+
+        assert candidate.verdict == "REJECT"
+        assert "calibration gate blocked" in candidate.reason
+        assert "Brier score too high" in candidate.reason
+
+    def test_recommended_size_uses_horizon_and_uncertainty_scale(self):
+        """Le sizing applique le scale-in temporel + régime météo, pas juste Kelly brut."""
+        bucket = _make_bucket(lower=17.5, upper=20.5, market_prob=0.50, model_prob=0.80, best_ask=0.50, fill_avg_price=0.50)
+        scan = _make_scan_result(buckets=[bucket], horizon_hours=72, sigma_c=3.2)
+        meta = {
+            "context": {"bucket_lower_c": 17.5, "bucket_upper_c": 20.5, "observed_metar_count": 6, "observed_authority": "weathercom_wunderground", "resolution_location": "KJFK"},
+            "weather_features": {"forecast_sources": {"ensemble": {"spread_c": 3.0, "num_members": 31}}},
+        }
+
+        candidate = build_candidate(_make_market(), scan, meta, settings=_make_settings())
+
+        # Kelly brut: p=0.80, price=0.50 => $15. PolyDekos scale: 72h=0.30, high regime=0.40 => $1.80.
+        assert candidate.recommended_size_usd == pytest.approx(1.8)
+        assert candidate.regime_uncertainty["level"] == "high"
+
+    def test_forecast_drift_blocks_full_size_scale_in(self):
+        """Un drift forecast >1°C empêche le passage full-size près de l'expiry."""
+        bucket = _make_bucket(lower=17.5, upper=20.5, market_prob=0.50, model_prob=0.80, best_ask=0.50, fill_avg_price=0.50)
+        scan = _make_scan_result(buckets=[bucket], horizon_hours=4, sigma_c=1.2, forecast_max_c=21.3)
+        meta = {
+            "context": {
+                "bucket_lower_c": 17.5,
+                "bucket_upper_c": 20.5,
+                "observed_metar_count": 6,
+                "observed_authority": "weathercom_wunderground",
+                "resolution_location": "KJFK",
+                "initial_forecast_c": 20.0,
+            },
+            "weather_features": {"forecast_sources": {"ensemble": {"spread_c": 0.4, "num_members": 31}}},
+        }
+
+        candidate = build_candidate(_make_market(), scan, meta, settings=_make_settings())
+
+        # Sans gate stabilité: 4h => horizon scale 1.0, low regime 1.0, donc $15.
+        # Avec drift 1.3°C: reste starter à 30%, donc $4.50 et pas de PASS nu.
+        assert candidate.recommended_size_usd == pytest.approx(4.5)
+        assert candidate.verdict == "PAPER"
+        assert "forecast drift" in candidate.reason
+
+    def test_high_uncertainty_downgrades_pass_and_logs_tail_hedge_plan(self):
+        """Régime météo incertain: pas de PASS nu, et tail hedge cheap loggé."""
+        bucket = _make_bucket(label="18-22", lower=18.0, upper=22.0, model_prob=0.80, market_prob=0.50, executable_ev=0.30, best_ask=0.05)
+        low_tail = _make_bucket(label="Under 15", lower=None, upper=15.0, model_prob=0.04, market_prob=0.03, executable_ev=0.00, best_ask=0.04)
+        high_tail = _make_bucket(label="Above 27", lower=27.0, upper=None, model_prob=0.05, market_prob=0.04, executable_ev=0.00, best_ask=0.06)
+        scan = _make_scan_result(buckets=[bucket, low_tail, high_tail], horizon_hours=96, sigma_c=3.2)
+        meta = {
+            "context": {"bucket_lower_c": 18.0, "bucket_upper_c": 22.0, "observed_metar_count": 6, "observed_authority": "weathercom_wunderground", "resolution_location": "KJFK"},
+            "weather_features": {"forecast_sources": {"ensemble": {"spread_c": 3.0, "num_members": 31}}},
+        }
+
+        candidate = build_candidate(_make_market(), scan, meta)
+
+        assert candidate.verdict == "PAPER"
+        assert "high uncertainty regime" in candidate.reason
+        payload = candidate.as_dict()
+        assert payload["regime_uncertainty"]["level"] == "high"
+        assert [leg["side"] for leg in payload["tail_hedge_plan"]["legs"]] == ["Under 15", "Above 27"]
+
+    def test_arbitrage_candidate_bypasses_uncertainty_overlay(self):
+        """L'arbitrage pur reste séparé de l'overlay météo directionnel."""
+        scan = _make_scan_result(buckets=[_make_bucket()], horizon_hours=96, sigma_c=3.2)
+        meta = {
+            "context": {"bucket_lower_c": 18.0, "bucket_upper_c": 22.0},
+            "weather_features": {"forecast_sources": {"ensemble": {"spread_c": 3.0, "num_members": 31}}},
+        }
+        market = _make_market(outcome_prices=[0.40, 0.40])
+
+        candidate = build_candidate(market, scan, meta)
+
+        assert candidate.verdict == "ARBITRAGE"
+        assert candidate.as_dict()["regime_uncertainty"] is None
+        assert candidate.as_dict()["tail_hedge_plan"] is None
 
     def test_narrow_bucket_reject(self):
         """Bucket étroit (width=1.0) → hard block REJECT actuel."""
@@ -187,3 +286,12 @@ class TestBuildCandidate:
         candidate = build_candidate(_make_market(), scan, meta)
         assert candidate.verdict == "REJECT"
         assert "executable EV below threshold" in candidate.reason
+
+    def test_absolute_edge_below_threshold_reject(self):
+        """model_prob trop proche du marché (<10pp) → REJECT même si executable_ev est haut."""
+        bucket = _make_bucket(market_prob=0.50, model_prob=0.59, executable_ev=0.30)
+        scan = _make_scan_result(buckets=[bucket])
+        meta = {"context": {"bucket_lower_c": 17.5, "bucket_upper_c": 20.5, "observed_metar_count": 6}}
+        candidate = build_candidate(_make_market(), scan, meta)
+        assert candidate.verdict == "REJECT"
+        assert "edge below 10pp absolute threshold" in candidate.reason

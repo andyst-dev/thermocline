@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from ..config import Settings
@@ -26,7 +26,10 @@ def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
     except ValueError:
         return None
 
@@ -55,9 +58,13 @@ def _is_weather_market(raw: dict[str, Any]) -> bool:
     return bool(SCANNABLE_CITY_TEMP_RE.search(question) or GLOBAL_TEMP_RE.search(question))
 
 
-def _normalize_market(raw: dict[str, Any]) -> WeatherMarket | None:
+def _normalize_market(raw: dict[str, Any], *, include_closed: bool = False) -> WeatherMarket | None:
     question = (raw.get("question") or raw.get("title") or "").strip()
     if not question or not _is_weather_market(raw):
+        return None
+    if not bool(raw.get("active", False)) and not include_closed:
+        return None
+    if bool(raw.get("closed", False)) and not include_closed:
         return None
 
     outcomes = [str(x).strip() for x in _parse_json_list(raw.get("outcomes"))]
@@ -97,13 +104,51 @@ def _fetch_gamma_page(settings: Settings, offset: int) -> list[dict[str, Any]]:
     return payload if isinstance(payload, list) else []
 
 
+def _fetch_gamma_event_page(settings: Settings, offset: int) -> list[dict[str, Any]]:
+    """Fetch recent active events.
+
+    Daily temperature bins are grouped under event objects and can sit very deep
+    in flat /markets pagination. Scanning recent events by creation time surfaces
+    new weather markets without walking tens of thousands of unrelated markets.
+    """
+    payload = get_json(
+        f"{settings.polymarket_gamma_url}/events",
+        params={
+            "limit": min(settings.market_limit, 100),
+            "offset": offset,
+            "closed": "false",
+            "active": "true",
+            "order": "createdAt",
+            "ascending": "false",
+        },
+    )
+    return payload if isinstance(payload, list) else []
+
+
+def _event_markets(event: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_markets = event.get("markets") or []
+    if not isinstance(raw_markets, list):
+        return []
+    markets: list[dict[str, Any]] = []
+    for raw_market in raw_markets:
+        if not isinstance(raw_market, dict):
+            continue
+        market = dict(raw_market)
+        market.setdefault("source", "polymarket_gamma_event")
+        market.setdefault("event_id", event.get("id"))
+        market.setdefault("event_slug", event.get("slug"))
+        market.setdefault("event_title", event.get("title"))
+        markets.append(market)
+    return markets
+
+
 def fetch_market_by_id(settings: Settings, market_id: str) -> WeatherMarket | None:
     if settings.use_fixtures:
         return None
     payload = get_json(f"{settings.polymarket_gamma_url}/markets/{market_id}", timeout=30)
     if not isinstance(payload, dict):
         return None
-    return _normalize_market(payload)
+    return _normalize_market(payload, include_closed=True)
 
 
 def fetch_weather_markets(settings: Settings) -> list[WeatherMarket]:
@@ -112,6 +157,18 @@ def fetch_weather_markets(settings: Settings) -> list[WeatherMarket]:
 
     markets_by_id: dict[str, WeatherMarket] = {}
     try:
+        event_limit = min(settings.market_limit, 100)
+        for page in range(settings.market_scan_pages):
+            offset = page * event_limit
+            events = _fetch_gamma_event_page(settings, offset)
+            if not events:
+                break
+            for event in events:
+                for raw in _event_markets(event):
+                    market = _normalize_market(raw)
+                    if market is not None:
+                        markets_by_id[market.market_id] = market
+
         for page in range(settings.market_scan_pages):
             offset = page * settings.market_limit
             payload = _fetch_gamma_page(settings, offset)
@@ -119,7 +176,7 @@ def fetch_weather_markets(settings: Settings) -> list[WeatherMarket]:
                 break
             for raw in payload:
                 market = _normalize_market(raw)
-                if market is not None:
+                if market is not None and market.market_id not in markets_by_id:
                     markets_by_id[market.market_id] = market
     except Exception as exc:
         # Network/API failure: keep local development usable, but make it visible.

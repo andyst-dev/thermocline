@@ -4,6 +4,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from .models import BucketProbability, ScanResult, WeatherMarket
+from .risk import RiskSizingConfig, apply_sizing_scales, compute_position_size
+from .uncertainty import build_tail_hedge_plan, evaluate_regime_uncertainty
+
+FORECAST_STABILITY_DRIFT_THRESHOLD_C = 1.0
+FORECAST_STABILITY_SCALE = 0.30
 
 
 def compute_kelly_size(
@@ -14,17 +19,16 @@ def compute_kelly_size(
     min_size_usd: float = 1.0,
     bankroll_usd: float = 100.0,
 ) -> float:
-    if model_prob is None or price is None or price <= 0 or price >= 1:
-        return min_size_usd
-    b = (1.0 / price) - 1.0
-    if b <= 0:
-        return min_size_usd
-    q = 1.0 - model_prob
-    kelly_f = (b * model_prob - q) / b
-    if kelly_f <= 0:
-        return 0.0
-    size = kelly_fraction * kelly_f * bankroll_usd
-    return float(min(max_size_usd, max(min_size_usd, size)))
+    return compute_position_size(
+        model_prob=model_prob,
+        price=price,
+        config=RiskSizingConfig(
+            kelly_fraction=kelly_fraction,
+            bankroll_usd=bankroll_usd,
+            min_position_size_usd=min_size_usd,
+            max_position_size_usd=max_size_usd,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,8 @@ class Candidate:
     model_prob_gaussian: float | None = None
     model_prob_ensemble: float | None = None
     recommended_size_usd: float | None = None
+    regime_uncertainty: dict[str, Any] | None = None
+    tail_hedge_plan: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -104,6 +110,8 @@ class Candidate:
             "model_prob_gaussian": round(self.model_prob_gaussian, 4) if self.model_prob_gaussian is not None else None,
             "model_prob_ensemble": round(self.model_prob_ensemble, 4) if self.model_prob_ensemble is not None else None,
             "recommended_size_usd": round(self.recommended_size_usd, 4) if self.recommended_size_usd is not None else None,
+            "regime_uncertainty": self.regime_uncertainty,
+            "tail_hedge_plan": self.tail_hedge_plan,
         }
 
 
@@ -114,7 +122,38 @@ def _top_bucket(result: ScanResult) -> BucketProbability | None:
     return max(result.buckets, key=lambda b: b.ev, default=None)
 
 
-def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: dict[str, Any], settings=None) -> Candidate:
+def _forecast_drift_c(context: dict[str, Any], current_forecast_c: float) -> float | None:
+    """Return abs forecast drift since initial/opened forecast if metadata exists."""
+    for key in ("initial_forecast_c", "opened_forecast_c", "previous_forecast_c"):
+        baseline = context.get(key)
+        if isinstance(baseline, (int, float)):
+            return abs(float(current_forecast_c) - float(baseline))
+    return None
+
+
+def _apply_forecast_stability_scale(
+    size_usd: float | None,
+    *,
+    drift_c: float | None,
+    min_position_size_usd: float,
+) -> float:
+    if size_usd is None or size_usd <= 0.0:
+        return 0.0
+    if drift_c is None or drift_c <= FORECAST_STABILITY_DRIFT_THRESHOLD_C:
+        return float(size_usd)
+    scaled = float(size_usd) * FORECAST_STABILITY_SCALE
+    if scaled < float(min_position_size_usd):
+        return 0.0
+    return float(round(scaled, 6))
+
+
+def build_candidate(
+    market: WeatherMarket,
+    result: ScanResult,
+    forecast_meta: dict[str, Any],
+    settings=None,
+    calibration_gate: Any | None = None,
+) -> Candidate:
     top = _top_bucket(result)
     context = forecast_meta.get("context") or {}
     resolution_location = context.get("resolution_location")
@@ -183,6 +222,8 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         cautions.append("ask above cheap-tail threshold")
     if top and top.executable_ev is not None and top.executable_ev < 0.15:
         blockers.append("executable EV below threshold")
+    if top and top.market_prob is not None and top.model_prob is not None and abs(top.model_prob - top.market_prob) < 0.10:
+        blockers.append("edge below 10pp absolute threshold")
     if result.liquidity < 250:
         blockers.append("low liquidity")
     if result.confidence != "high":
@@ -200,6 +241,36 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         cautions.append("missing resolution source")
     elif ("wunderground.com" in str(resolution_source).lower() or "weather.com" in str(resolution_source).lower()) and observed_authority != "weathercom_wunderground" and result.horizon_hours > 0:
         blockers.append("official Wunderground/weather.com source unavailable")
+    if calibration_gate is not None:
+        if isinstance(calibration_gate, dict):
+            gate_allowed = bool(calibration_gate.get("allowed"))
+            gate_reasons = list(calibration_gate.get("reasons") or [])
+        else:
+            gate_allowed = bool(getattr(calibration_gate, "allowed", False))
+            gate_reasons = list(getattr(calibration_gate, "reasons", []) or [])
+        if not gate_allowed:
+            detail = "; ".join(str(reason) for reason in gate_reasons[:3]) or "calibration unavailable"
+            blockers.append(f"calibration gate blocked: {detail}")
+
+    forecast_drift_c = _forecast_drift_c(context, result.forecast_max_c)
+    if forecast_drift_c is not None and forecast_drift_c > FORECAST_STABILITY_DRIFT_THRESHOLD_C:
+        cautions.append(
+            f"forecast drift {forecast_drift_c:.2f}°C exceeds {FORECAST_STABILITY_DRIFT_THRESHOLD_C:.1f}°C stability gate"
+        )
+
+    regime = evaluate_regime_uncertainty(
+        forecast_meta.get("weather_features"),
+        forecast_value_c=result.forecast_max_c,
+        sigma_c=result.sigma_c,
+        horizon_hours=result.horizon_hours,
+    )
+    tail_hedge_plan = build_tail_hedge_plan(
+        result.buckets,
+        forecast_value_c=result.forecast_max_c,
+        regime=regime,
+    )
+    if regime.level == "high":
+        cautions.append("high uncertainty regime: use tail hedge plan or stay paper")
 
     exec_ev = top.executable_ev if top else None
     ask = top.best_ask if top else None
@@ -220,13 +291,25 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
     price_for_kelly = fill_avg_price if fill_avg_price is not None else (ask if ask is not None else gamma_price)
     recommended_size_usd = None
     if settings is not None:
-        recommended_size_usd = compute_kelly_size(
+        base_size_usd = compute_kelly_size(
             model_prob=model_prob,
             price=price_for_kelly,
             kelly_fraction=settings.kelly_fraction,
             max_size_usd=settings.max_position_size_usd,
             min_size_usd=settings.min_position_size_usd,
             bankroll_usd=settings.kelly_bankroll_usd,
+        )
+        recommended_size_usd = apply_sizing_scales(
+            base_size_usd,
+            horizon_hours=result.horizon_hours,
+            regime_level=regime.level,
+            min_position_size_usd=settings.min_position_size_usd,
+            max_position_size_usd=settings.max_position_size_usd,
+        )
+        recommended_size_usd = _apply_forecast_stability_scale(
+            recommended_size_usd,
+            drift_c=forecast_drift_c,
+            min_position_size_usd=settings.min_position_size_usd,
         )
 
     score = 0.0
@@ -290,4 +373,6 @@ def build_candidate(market: WeatherMarket, result: ScanResult, forecast_meta: di
         model_prob_gaussian=model_prob_gaussian,
         model_prob_ensemble=model_prob_ensemble,
         recommended_size_usd=recommended_size_usd,
+        regime_uncertainty=regime.as_dict(),
+        tail_hedge_plan=tail_hedge_plan,
     )

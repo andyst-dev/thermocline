@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
 from ..http import get_json
-# Public API key embedded in Weather Underground history pages. Treat this as
-# best-effort read-only verification, not a guaranteed contract.
-WEATHER_COM_API_KEY = "e1f10a1e78da46f5b10a1e78da96f525"
+
+# Weather.com / Wunderground history endpoints require an API key. Do not commit
+# credentials; provide this from the runtime environment when official
+# Weather.com verification is enabled.
+WEATHER_COM_API_KEY = os.getenv("WEATHER_COM_API_KEY")
 
 
 def icao_from_wunderground_source(source: str | None) -> str | None:
@@ -46,6 +49,8 @@ def _country_code_from_wunderground_source(source: str | None) -> str | None:
 
 
 def fetch_historical_observations(icao: str, target_date: datetime, units: str = "m", country: str = "US") -> dict[str, Any]:
+    if not WEATHER_COM_API_KEY:
+        raise RuntimeError("WEATHER_COM_API_KEY is not configured")
     date = target_date.strftime("%Y%m%d")
     return get_json(
         f"https://api.weather.com/v1/location/{icao}:9:{country}/observations/historical.json",
@@ -71,29 +76,41 @@ def official_extreme_c(source: str | None, target_date: datetime, metric: str) -
     observations = payload.get("observations") if isinstance(payload, dict) else None
     if not isinstance(observations, list):
         return None, 0, f"weather.com historical response missing observations for {icao}"
-    temps: list[float] = []
+    instant_temps: list[float] = []
+    aggregate_temps: list[float] = []
     observation_count = 0
-    # Weather.com historical rows often expose `max_temp`/`min_temp` daily
-    # aggregates on only one row. Using only instantaneous `temp` can miss the
-    # official daily extreme badly (e.g. KLGA had max_temp=18 while hourly temp
-    # samples in the returned window topped at 10). Include the aggregate field
-    # for the metric when present, then fall back to instantaneous temps.
+    # Weather.com historical rows expose both instantaneous `temp` samples and
+    # occasional daily aggregate fields (`max_temp`/`min_temp`). Do not merge the
+    # aggregate with samples and then take the extreme: stale aggregate values can
+    # fabricate a daily high/low that is inconsistent with the hourly table shown
+    # on Wunderground. Prefer the instantaneous samples; if an aggregate diverges
+    # materially, mark the official observation unavailable instead of feeding a
+    # suspect value into settlement/calibration diagnostics.
     metric_field = "min_temp" if metric == "lowest" else "max_temp"
     for row in observations:
         if not isinstance(row, dict):
             continue
-        row_had_temp = False
-        for field in (metric_field, "temp"):
-            if row.get(field) is None:
-                continue
+        if row.get("temp") is not None:
             try:
-                temps.append(float(row[field]))
-                row_had_temp = True
+                instant_temps.append(float(row["temp"]))
+                observation_count += 1
             except (TypeError, ValueError):
-                continue
-        if row_had_temp:
-            observation_count += 1
-    if not temps:
-        return None, 0, f"no weather.com historical temperatures for {icao}"
-    observed = min(temps) if metric == "lowest" else max(temps)
-    return observed, observation_count, f"weather.com/Wunderground historical obs at {icao}:9:{country}"
+                pass
+        if row.get(metric_field) is not None:
+            try:
+                aggregate_temps.append(float(row[metric_field]))
+            except (TypeError, ValueError):
+                pass
+    if not instant_temps:
+        return None, 0, f"no weather.com historical instantaneous temperatures for {icao}"
+    observed = min(instant_temps) if metric == "lowest" else max(instant_temps)
+    if aggregate_temps:
+        aggregate_observed = min(aggregate_temps) if metric == "lowest" else max(aggregate_temps)
+        if abs(aggregate_observed - observed) > 2.0:
+            return (
+                None,
+                observation_count,
+                f"weather.com aggregate/sample divergence at {icao}:9:{country}: "
+                f"aggregate={aggregate_observed}C samples={observed}C",
+            )
+    return observed, observation_count, f"weather.com/Wunderground historical hourly obs at {icao}:9:{country}"

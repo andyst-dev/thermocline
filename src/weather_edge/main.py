@@ -5,19 +5,22 @@ import json
 import os
 from pathlib import Path
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from .audit import write_json_gz
 from .backtest import (
     DEFAULT_HORIZONS,
     HORIZON_BUCKETS,
+    SIGMA_CALIBRATION_FILENAME,
     BacktestRecord,
     aggregate_sigma,
     recalibrate_sigma,
     run_backtest_for_city,
     write_backtest_report,
 )
+from .calibration import build_calibration_report, evaluate_calibration_gate, run_calibration
 from .candidates import build_candidate, compute_kelly_size
+from .closed_trades_audit import format_closed_trades_audit_summary, write_closed_trades_audit_report
 from .clients.aviationweather import observed_extreme_c
 from .clients.clob import simulate_buy_fill
 from .clients.openmeteo import geocode_city
@@ -25,7 +28,13 @@ from .clients.polymarket import fetch_market_by_id, fetch_weather_markets
 from .clients.weathercom import icao_from_wunderground_source, official_extreme_c
 from .config import get_settings
 from .db import close_paper_trade, connect, init_db, insert_backtest_record, insert_forecast, insert_paper_trade, insert_scan, list_paper_trades, upsert_markets
+from .event_exposure import EventExposureLimits, check_event_cap, synthetic_open_row
+from .ladder import build_ladders_from_candidates, ladder_to_dict
+from .ladder_backtest import format_ladder_backtest_summary, write_ladder_backtest_report
+from .ladder_fill import simulate_ladder_fill
 from .parsing import parse_temperature_contract
+from .research_dataset import export_research_dataset
+from .risk import RiskSizingConfig, write_sensitivity_report
 from .scanner import ScanSkip, filter_markets, scan_market, _effective_sigma_observed
 from .settlement import settle_candidate
 from .timezones import timezone_hint_for_icao
@@ -35,6 +44,26 @@ def cmd_init_db() -> None:
     settings = get_settings()
     init_db(settings.db_path)
     print(f"DB initialized: {settings.db_path}")
+
+
+def cmd_risk_sizing_report(model_prob: float, price: float, output: str | None = None) -> None:
+    settings = get_settings()
+    config = RiskSizingConfig(
+        kelly_fraction=settings.kelly_fraction,
+        bankroll_usd=settings.kelly_bankroll_usd,
+        min_position_size_usd=settings.min_position_size_usd,
+        max_position_size_usd=settings.max_position_size_usd,
+    )
+    output_path = Path(output) if output else settings.project_root / "reports" / "risk_sizing_grid.json"
+    report_path = write_sensitivity_report(
+        output_path.parent,
+        model_prob=model_prob,
+        price=price,
+        config=config,
+        candidate_ref={"source": "manual_risk_sizing_report"},
+        filename=output_path.name,
+    )
+    print(f"Saved report: {report_path}")
 
 
 def cmd_fetch_markets() -> None:
@@ -108,6 +137,7 @@ def _generate_candidates(settings):
     candidates = []
     skipped: list[tuple[str, str]] = []
     with connect(settings.db_path) as conn:
+        calibration_gate = evaluate_calibration_gate(build_calibration_report(conn))
         upsert_markets(conn, markets)
         for market in markets:
             try:
@@ -129,14 +159,14 @@ def _generate_candidates(settings):
                 raw=forecast_meta,
             )
             insert_scan(conn, result)
-            candidates.append(build_candidate(market, result, forecast_meta, settings))
+            candidates.append(build_candidate(market, result, forecast_meta, settings, calibration_gate=calibration_gate))
     candidates.sort(key=lambda c: (c.verdict == "PASS", c.verdict == "PAPER", c.score), reverse=True)
-    return candidates, skipped
+    return candidates, skipped, calibration_gate
 
 
 def cmd_verify_candidates() -> None:
     settings = get_settings()
-    candidates, skipped = _generate_candidates(settings)
+    candidates, skipped, calibration_gate = _generate_candidates(settings)
     output = []
     for candidate in candidates[: settings.report_limit]:
         candidate_dict = candidate.as_dict()
@@ -154,18 +184,31 @@ def cmd_verify_candidates() -> None:
                 bankroll_usd=settings.kelly_bankroll_usd,
             )
         output.append(refreshed or candidate_dict)
+    ladder_candidates = build_ladders_from_candidates(candidates)
+    ladders_output = []
+    for ladder in ladder_candidates[: settings.report_limit]:
+        payload = ladder_to_dict(ladder)
+        payload["fill_simulation"] = simulate_ladder_fill(settings, ladder, requested_usd_per_leg=1.0)
+        ladders_output.append(payload)
     report = {
         "policy": {
             "meaning": "PASS is a candidate for manual verification, not permission to trade automatically.",
             "no_auto_trade": True,
             "min_executable_ev": 0.15,
             "max_preferred_ask": 0.10,
+            "ladder_exact_range_read_only": True,
+            "ladder_excludes_paper_open": True,
+            "ladder_fill_simulation_read_only": True,
+            "ladder_fill_simulation_places_orders": False,
         },
+        "calibration_gate": calibration_gate.as_dict(),
         "candidates": output,
+        "ladders": ladders_output,
         "counts": {
             "pass": sum(1 for c in candidates if c.verdict == "PASS"),
             "paper": sum(1 for c in candidates if c.verdict == "PAPER"),
             "reject": sum(1 for c in candidates if c.verdict == "REJECT"),
+            "ladders": len(ladder_candidates),
             "skipped": len(skipped),
         },
         "skipped": skipped[:50],
@@ -212,14 +255,21 @@ def _refresh_candidate_fill_for_open(settings, candidate: dict, size_usd: float)
 
 def cmd_paper_open(limit: int, size_usd: float | None = None, include_paper: bool = False) -> None:
     settings = get_settings()
-    candidates, _skipped = _generate_candidates(settings)
+    candidates, _skipped, _calibration_gate = _generate_candidates(settings)
     allowed = {"PASS", "PAPER"} if include_paper else {"PASS"}
     selected = [c.as_dict() for c in candidates if c.verdict in allowed and c.best_ask is not None and c.side]
     opened = []
+    blocked_by_event_cap = []
+    event_limits = EventExposureLimits(
+        max_legs_per_event=settings.event_max_legs,
+        max_usd_per_event=settings.event_max_usd,
+        max_open_events=settings.event_max_open_events,
+    )
     with connect(settings.db_path) as conn:
         # Do not open multiple sides/buckets for the same market in paper. They are
         # correlated/contradictory and can inflate apparent edge.
         all_rows = list_paper_trades(conn)
+        exposure_rows = list(all_rows)
         existing = {row["market_id"] for row in all_rows}
         open_count = sum(1 for row in all_rows if row["status"] == "open")
         if open_count >= settings.max_open_positions:
@@ -252,23 +302,44 @@ def cmd_paper_open(limit: int, size_usd: float | None = None, include_paper: boo
                     continue
                 if ask_capacity_usd is not None:
                     kelly_size = min(kelly_size, float(ask_capacity_usd))
+                allowed_by_event, event_reason = check_event_cap(
+                    refresh_1,
+                    exposure_rows,
+                    proposed_size_usd=kelly_size,
+                    limits=event_limits,
+                )
+                if not allowed_by_event:
+                    blocked_by_event_cap.append({"candidate": refresh_1, "size_usd": kelly_size, "reason": event_reason})
+                    continue
                 # Re-run refresh with the actual kelly size
                 refreshed = _refresh_candidate_fill_for_open(settings, refresh_1, size_usd=kelly_size)
                 if refreshed is None:
                     continue
                 insert_paper_trade(conn, candidate=refreshed, size_usd=kelly_size, notes="auto paper-open from verified candidates")
                 opened.append(refreshed)
+                exposure_rows.append(synthetic_open_row(refreshed, kelly_size))
                 existing.add(key)
             else:
+                allowed_by_event, event_reason = check_event_cap(
+                    candidate,
+                    exposure_rows,
+                    proposed_size_usd=size_usd,
+                    limits=event_limits,
+                )
+                if not allowed_by_event:
+                    blocked_by_event_cap.append({"candidate": candidate, "size_usd": size_usd, "reason": event_reason})
+                    continue
                 refreshed = _refresh_candidate_fill_for_open(settings, candidate, size_usd)
                 if refreshed is None:
                     continue
                 insert_paper_trade(conn, candidate=refreshed, size_usd=size_usd, notes="auto paper-open from verified candidates")
                 opened.append(refreshed)
+                exposure_rows.append(synthetic_open_row(refreshed, size_usd))
                 existing.add(key)
     report_path = settings.project_root / "reports" / "paper_opened.json"
-    report_path.write_text(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2), encoding="utf-8")
-    print(json.dumps({"opened": opened, "size_usd": size_usd}, indent=2))
+    payload = {"opened": opened, "size_usd": size_usd, "blocked_by_event_cap": blocked_by_event_cap}
+    report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(json.dumps(payload, indent=2))
     print(f"Saved report: {report_path}")
 
 
@@ -639,7 +710,7 @@ def cmd_calibration_snapshot() -> None:
     from .parsing import bucket_probability
 
     settings = get_settings()
-    candidates, skipped = _generate_candidates(settings)
+    candidates, skipped, calibration_gate = _generate_candidates(settings)
     sigma_eff = _effective_sigma_observed()
 
     records = []
@@ -717,6 +788,7 @@ def cmd_paper_cycle() -> None:
     # under investigation without stopping settlement/reporting.
     cmd_verify_candidates()
     cmd_calibration_snapshot()
+    cmd_calibration_report()
     if os.environ.get("WEATHER_EDGE_DISABLE_PAPER_OPEN") == "1":
         print("Paper opening disabled by WEATHER_EDGE_DISABLE_PAPER_OPEN=1")
     else:
@@ -738,6 +810,121 @@ DEFAULT_BACKTEST_CITIES = [
     "Moscow",
     "Wellington",
 ]
+
+
+def cmd_recalibrate_sigma(lookback_days: int = 9999) -> None:
+    """Backfill backtest_records from closed paper trades, then rebuild sigma calibration.
+
+    This is the one-shot rescue for trades that were settled via Gamma (and therefore
+    never recorded their observed-value into backtest_records).
+    """
+    from .clients.aviationweather import observed_extreme_c
+    from .clients.weathercom import official_extreme_c
+    from .timezones import timezone_hint_for_icao
+
+    settings = get_settings()
+    init_db(settings.db_path)
+
+    inserted = 0
+    skipped = 0
+    failed = 0
+
+    with connect(settings.db_path) as conn:
+        rows = list_paper_trades(conn, "closed")
+        for row in rows:
+            try:
+                candidate = json.loads(row["candidate_json"])
+                target_date = candidate.get("target_date")
+                if not isinstance(target_date, str) or len(target_date) != 10:
+                    skipped += 1
+                    continue
+
+                # Already in backtest_records?
+                city = str(candidate.get("city") or "")
+                horizon_hours = candidate.get("horizon_hours")
+                if horizon_hours is not None:
+                    existing = conn.execute(
+                        "SELECT 1 FROM backtest_records WHERE city = ? AND target_date = ? AND ABS(horizon_hours - ?) < 0.1 LIMIT 1",
+                        (city, target_date, float(horizon_hours)),
+                    ).fetchone()
+                    if existing:
+                        skipped += 1
+                        continue
+
+                # Get observed value
+                icao = candidate.get("resolution_location")
+                timezone_name = str(candidate.get("timezone") or timezone_hint_for_icao(icao))
+                metric = "highest"
+                ctx = candidate.get("context")
+                if isinstance(ctx, dict) and ctx.get("metric"):
+                    metric = str(ctx["metric"])
+                elif candidate.get("metric"):
+                    metric = str(candidate["metric"])
+
+                resolution_source = str(candidate.get("resolution_source") or "")
+                observed = None
+                target_dt = datetime.fromisoformat(target_date + "T00:00:00")
+                if "wunderground.com" in resolution_source.lower() or "weather.com" in resolution_source.lower():
+                    observed, _, _ = official_extreme_c(resolution_source, target_dt, metric)
+                if observed is None and icao:
+                    observed, _ = observed_extreme_c(icao, target_dt, timezone_name, metric)
+
+                if observed is None:
+                    skipped += 1
+                    continue
+
+                forecast_value = candidate.get("forecast_value_c")
+                if forecast_value is None:
+                    skipped += 1
+                    continue
+
+                horizon_hours = float(horizon_hours) if horizon_hours is not None else 0.0
+                opened_at = row["opened_at"]
+                try:
+                    reference_date = str(opened_at).split("T", 1)[0]
+                except Exception:
+                    reference_date = target_date
+
+                record = BacktestRecord(
+                    city=city,
+                    latitude=float(candidate.get("latitude") or 0.0),
+                    longitude=float(candidate.get("longitude") or 0.0),
+                    target_date=target_date,
+                    reference_date=reference_date,
+                    horizon_hours=horizon_hours,
+                    forecast_max_c=float(forecast_value),
+                    observed_max_c=float(observed),
+                    residual_c=float(forecast_value) - float(observed),
+                    metric=metric,
+                    model_source="live_scanner_backfilled",
+                    fetched_at=str(opened_at),
+                )
+                insert_backtest_record(conn, record)
+                inserted += 1
+            except Exception as exc:
+                failed += 1
+                print(f"WARNING: backfill failed for trade {row['id']}: {exc}", flush=True)
+                continue
+
+    # Backfill records are now committed; run calibration on complete data.
+    aggregates = recalibrate_sigma(
+        db_path=settings.db_path,
+        project_root=settings.project_root,
+        lookback_days=lookback_days,
+    )
+
+    print(f"\nBackfill complete: {inserted} inserted, {skipped} skipped, {failed} failed")
+    print(f"\n=== Empirical Sigma by Horizon ===")
+    total = aggregates.get("total_records", 0)
+    print(f"Total records used: {total}")
+    for label, _, _ in HORIZON_BUCKETS:
+        stats = aggregates["by_horizon"].get(label, {})
+        count = stats.get("count", 0)
+        sigma = stats.get("sigma_c")
+        mean = stats.get("mean_residual_c")
+        if count > 0:
+            print(f"  {label:12s} | n={count:4d} | σ={sigma:6.3f}°C | bias={mean:+7.3f}°C")
+    print(f"\nSaved to: {settings.project_root / 'data' / SIGMA_CALIBRATION_FILENAME}")
 
 
 def cmd_backtest(
@@ -825,6 +1012,47 @@ def cmd_run_once() -> None:
     cmd_scan()
 
 
+def cmd_calibration_report() -> None:
+    settings = get_settings()
+    report, gate, path = run_calibration(settings.db_path)
+    print(path.read_text(encoding="utf-8"))
+    print("\n--- JSON summary ---")
+    summary = report.as_dict()
+    summary["calibration_gate"] = gate.as_dict()
+    print(json.dumps(summary, indent=2))
+
+
+def cmd_audit_closed_trades(output: str | None = None, include_observations: bool = False) -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    output_path = Path(output) if output else settings.project_root / "reports" / "closed_trades_audit.json"
+    report = write_closed_trades_audit_report(
+        settings.db_path,
+        output_path,
+        include_observations=include_observations,
+    )
+    print(format_closed_trades_audit_summary(report))
+    print(f"Saved report: {output_path}")
+
+
+def cmd_export_research_dataset(output: str | None = None) -> None:
+    settings = get_settings()
+    init_db(settings.db_path)
+    output_path = Path(output) if output else settings.project_root / "data" / "research_dataset.jsonl"
+    summary = export_research_dataset(settings.db_path, output_path)
+    print(json.dumps(summary, indent=2))
+
+
+def cmd_ladder_backtest_report(output: str | None = None) -> None:
+    """Write a read-only PolyDekos ladder backtest/readiness report."""
+    settings = get_settings()
+    init_db(settings.db_path)
+    output_path = Path(output) if output else settings.project_root / "reports" / "ladder_backtest_report.json"
+    payload = write_ladder_backtest_report(settings.db_path, output_path)
+    print(format_ladder_backtest_summary(payload))
+    print(f"Saved report: {output_path}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="weather-edge")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -841,6 +1069,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("reconcile-sources")
     sub.add_parser("paper-cycle")
     sub.add_parser("run-once")
+    sub.add_parser("calibration-report")
+    sub.add_parser("calibration-snapshot")
+    audit_closed = sub.add_parser("audit-closed-trades")
+    audit_closed.add_argument("--output", type=str, default=None, help="Output JSON path (default: reports/closed_trades_audit.json)")
+    audit_closed.add_argument("--include-observations", action="store_true", help="Fetch official/METAR observations and compare recorded vs recomputed outcomes")
+    risk_report = sub.add_parser("risk-sizing-report")
+    risk_report.add_argument("--model-prob", type=float, default=0.70, help="Base model probability for offline sensitivity grid")
+    risk_report.add_argument("--price", type=float, default=0.50, help="Base entry price for offline sensitivity grid")
+    risk_report.add_argument("--output", type=str, default=None, help="Output JSON path (default: reports/risk_sizing_grid.json)")
+    research_dataset = sub.add_parser("export-research-dataset")
+    research_dataset.add_argument("--output", type=str, default=None, help="Output JSONL path (default: data/research_dataset.jsonl)")
+    ladder_backtest = sub.add_parser("ladder-backtest-report")
+    ladder_backtest.add_argument("--output", type=str, default=None, help="Output JSON path (default: reports/ladder_backtest_report.json)")
+    recal = sub.add_parser("recalibrate-sigma")
+    recal.add_argument("--lookback-days", type=int, default=9999, help="Lookback window in days for sigma calibration (default: all data)")
     backtest = sub.add_parser("backtest")
     backtest.add_argument("--cities", type=str, default=None, help="Comma-separated city list")
     backtest.add_argument("--start-date", type=str, required=True, help="YYYY-MM-DD")
@@ -873,6 +1116,20 @@ def main() -> None:
         cmd_paper_cycle()
     elif args.command == "run-once":
         cmd_run_once()
+    elif args.command == "calibration-report":
+        cmd_calibration_report()
+    elif args.command == "calibration-snapshot":
+        cmd_calibration_snapshot()
+    elif args.command == "audit-closed-trades":
+        cmd_audit_closed_trades(output=args.output, include_observations=args.include_observations)
+    elif args.command == "risk-sizing-report":
+        cmd_risk_sizing_report(model_prob=args.model_prob, price=args.price, output=args.output)
+    elif args.command == "export-research-dataset":
+        cmd_export_research_dataset(output=args.output)
+    elif args.command == "ladder-backtest-report":
+        cmd_ladder_backtest_report(output=args.output)
+    elif args.command == "recalibrate-sigma":
+        cmd_recalibrate_sigma(lookback_days=args.lookback_days)
     elif args.command == "backtest":
         cities = [c.strip() for c in args.cities.split(",") if c.strip()] if args.cities else None
         horizons = [int(h.strip()) for h in args.horizons.split(",") if h.strip()] if args.horizons else None

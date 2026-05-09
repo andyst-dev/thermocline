@@ -16,6 +16,7 @@ from .timezones import timezone_hint_for_icao
 from .ensemble import ensemble_bucket_probability, fetch_gfs_ensemble
 from .models import BucketProbability, MarketContext, ScanResult, WeatherMarket
 from .parsing import bucket_probability, parse_bucket, parse_city_and_date, parse_global_temperature_market, parse_metric_city_and_date, parse_temperature_contract
+from .weather_features import build_weather_feature_bundle
 
 
 class ScanSkip(Exception):
@@ -241,6 +242,25 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
         top_bucket_ev=top.ev if top else None,
         confidence=confidence,
     )
+    forecast_sources = {"openmeteo": {"model": "gfs_seamless"}}
+    if ensemble:
+        forecast_sources["ensemble"] = {
+            "model": "gfs_seamless",
+            "spread_c": ensemble.get("spread_max") if metric == "highest" else ensemble.get("spread_min"),
+            "spread_max_c": ensemble.get("spread_max"),
+            "spread_min_c": ensemble.get("spread_min"),
+            "num_members": ensemble.get("num_members"),
+        }
+    weather_features = build_weather_feature_bundle(
+        settings.db_path,
+        city=context.city,
+        latitude=context.latitude,
+        longitude=context.longitude,
+        target_date=context.target_date,
+        metric=metric,
+        forecast_value_c=forecast_max_c,
+        forecast_sources=forecast_sources,
+    )
     return result, {
         "context": {
             "city": context.city,
@@ -250,6 +270,7 @@ def _scan_city_temperature_market(settings: Settings, market: WeatherMarket) -> 
             "metric": metric,
         },
         "forecast": forecast,
+        "weather_features": weather_features,
     }
 
 
@@ -275,6 +296,7 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     _lat, _lon, timezone_name = _resolve_forecast_coords(settings, resolution_location, _icao_for_resolution)
     forecast = fetch_hourly_forecast(settings, _lat, _lon, timezone_name)
     forecast_value_c = _forecast_daily_extreme(forecast, contract.target_date, contract.metric)
+    openmeteo_forecast_value_c = forecast_value_c
     sigma_c, horizon_hours = _sigma_for_horizon(contract.target_date, settings)
 
     # Fetch GFS ensemble for mid-to-long horizons
@@ -400,7 +422,26 @@ def _scan_temperature_contract(settings: Settings, market: WeatherMarket) -> tup
     if _partial_obs_c is not None:
         # Enhancement 3: log gap between partial METAR and model forecast for later analysis
         _context_meta["observation_gap_c"] = _partial_obs_c - forecast_value_c
-    return result, {"context": _context_meta, "forecast": forecast}
+    forecast_sources = {"openmeteo": {"model": "gfs_seamless"}}
+    if ensemble:
+        forecast_sources["ensemble"] = {
+            "model": "gfs_seamless",
+            "spread_c": ensemble.get("spread_max") if contract.metric == "highest" else ensemble.get("spread_min"),
+            "spread_max_c": ensemble.get("spread_max"),
+            "spread_min_c": ensemble.get("spread_min"),
+            "num_members": ensemble.get("num_members"),
+        }
+    weather_features = build_weather_feature_bundle(
+        settings.db_path,
+        city=contract.city,
+        latitude=_lat,
+        longitude=_lon,
+        target_date=contract.target_date,
+        metric=contract.metric,
+        forecast_value_c=openmeteo_forecast_value_c,
+        forecast_sources=forecast_sources,
+    )
+    return result, {"context": _context_meta, "forecast": forecast, "weather_features": weather_features}
 
 
 def _scan_global_temperature_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, dict]:
@@ -408,7 +449,10 @@ def _scan_global_temperature_market(settings: Settings, market: WeatherMarket) -
     if not parsed:
         raise ScanSkip("question pattern unsupported")
     year, month, lower, upper = parsed
-    baseline = global_temp_baseline(month)
+    try:
+        baseline = global_temp_baseline(month)
+    except Exception as exc:
+        raise ScanSkip(f"GISTEMP baseline unavailable: {exc}") from exc
     bracket_prob = _cap_model_prob(bucket_probability(lower, upper, baseline.mean_c, baseline.sigma_c))
 
     buckets: list[BucketProbability] = []
@@ -465,5 +509,14 @@ def scan_market(settings: Settings, market: WeatherMarket) -> tuple[ScanResult, 
     return _scan_global_temperature_market(settings, market)
 
 
-def filter_markets(markets: list[WeatherMarket], min_liquidity: float) -> list[WeatherMarket]:
-    return [m for m in markets if m.active and not m.closed and m.liquidity >= min_liquidity]
+def filter_markets(markets: list[WeatherMarket], min_liquidity: float, now: datetime | None = None) -> list[WeatherMarket]:
+    if now is None:
+        now = datetime.now(timezone.utc)
+    return [
+        m
+        for m in markets
+        if m.active
+        and not m.closed
+        and m.liquidity >= min_liquidity
+        and (m.end_date is None or m.end_date > now)
+    ]

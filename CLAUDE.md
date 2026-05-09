@@ -5,7 +5,7 @@
 ## Project
 Systematic weather prediction market making on Polymarket. Combines NWP ensemble forecasts, Gaussian probability models, and Kelly Criterion sizing to find mispriced temperature contracts.
 
-**Current phase:** Live paper observation. Zero real money at risk.
+**Current phase:** Production observation/readiness. Cron is allowed to collect reports, book snapshots, and ladder fill simulations. Paper/live opening stays disabled with `WEATHER_EDGE_DISABLE_PAPER_OPEN=1` until explicit operator approval and green calibration/readiness gates.
 
 ## Stack
 - Python 3.11+
@@ -17,18 +17,18 @@ Systematic weather prediction market making on Polymarket. Combines NWP ensemble
 
 ## Commands
 ```bash
-# Dev
-python -m weather_edge scan              # Single market scan
-python -m weather_edge verify-candidates # Check top candidates
-python -m weather_edge paper-open        # Open paper positions (PASS only)
-python -m weather_edge paper-settle      # Settle resolved positions
-python -m weather_edge recalibrate-sigma --lookback-days 60
+# Dev / observation
+PYTHONPATH=src python3 -m weather_edge.main scan
+PYTHONPATH=src WEATHER_EDGE_DISABLE_PAPER_OPEN=1 python3 -m weather_edge.main verify-candidates
+PYTHONPATH=src WEATHER_EDGE_DISABLE_PAPER_OPEN=1 python3 -m weather_edge.main ladder-backtest-report
+PYTHONPATH=src python3 -m weather_edge.main paper-settle
+PYTHONPATH=src python3 -m weather_edge.main calibration-snapshot
 
 # Test
-PYTHONPATH=src pytest tests/ -v
+PYTHONPATH=src pytest tests/ -q
 
 # Cron (production)
-*/30 * * * * /path/to/weather-edge/scripts/paper_cycle.sh
+*/30 * * * * builder cd /home/builder/weather-edge && bash scripts/paper_cycle.sh
 ```
 
 ## Architecture
@@ -82,8 +82,8 @@ src/weather_edge/
 - ENSO bias correction (roadmap item, do not start without approval).
 - Modifying `scripts/paper_cycle.sh` cron logic without discussing with the user.
 
-## Key Metrics (last known)
-- Paper trades resolved: 42
-- Active positions: 0
+## Key Metrics (current clean-slate baseline)
+- Fresh runtime DB initialized after archiving legacy data: `paper_trades=0`, `backtest_records=0`
 - Cron cadence: every 30 min
-- Tests: 102/102 passing
+- Tests: 194/194 passing
+- Latest mode: observation/readiness, no live orders, no automatic paper opens

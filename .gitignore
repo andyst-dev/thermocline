@@ -1,15 +1,37 @@
-data/snapshots/
-logs/*
-!logs/.gitignore
-!logs/.gitkeep
-reports/*.json
-reports/*.md
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
 
+# Editor / agent scratch
+.hermes/
+.idea/
+.vscode/
+
+# Runtime data — operational observation, not source
+# Keep .gitkeep / .gitignore placeholders so directories survive a clean checkout.
+data/*
+!data/.gitkeep
 data/backups/
+data/cache/
+data/run/
+data/snapshots/
+data/*.db
 data/*.db-wal
 data/*.db-shm
+data/research_dataset.jsonl
+data/research_dataset*.jsonl
+data/sigma_calibration.json
 
-# SQLite database
-data/weather_edge.db
+# Reports — generated every paper-cycle, not committed
+reports/*
+!reports/.gitkeep
+
+# Logs — runtime only (logs/.gitignore already restricts this dir)
+logs/*
+!logs/.gitkeep
+!logs/.gitignore

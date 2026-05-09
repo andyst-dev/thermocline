@@ -7,14 +7,14 @@ from weather_edge.candidates import compute_kelly_size
 
 
 class TestComputeKellySize:
-    def test_model_prob_none_returns_min(self):
-        assert compute_kelly_size(model_prob=None, price=0.05, min_size_usd=2.0) == 2.0
+    def test_model_prob_none_returns_zero(self):
+        assert compute_kelly_size(model_prob=None, price=0.05, min_size_usd=2.0) == 0.0
 
-    def test_price_none_returns_min(self):
-        assert compute_kelly_size(model_prob=0.8, price=None, min_size_usd=2.0) == 2.0
+    def test_price_none_returns_zero(self):
+        assert compute_kelly_size(model_prob=0.8, price=None, min_size_usd=2.0) == 0.0
 
-    def test_price_zero_returns_min(self):
-        assert compute_kelly_size(model_prob=0.8, price=0.0, min_size_usd=2.0) == 2.0
+    def test_price_zero_returns_zero(self):
+        assert compute_kelly_size(model_prob=0.8, price=0.0, min_size_usd=2.0) == 0.0
 
     def test_no_edge_returns_zero(self):
         # model_prob == price → kelly_f = 0
